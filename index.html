@@ -146,6 +146,18 @@
   </div>
 </div>
 
+<div id="pinChangeScreen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--teal-900),#08221D);">
+  <div class="login-card">
+    <div class="login-eyebrow">ครั้งแรกที่เข้าใช้งาน</div>
+    <div class="login-title">ตั้ง PIN ใหม่ของคุณ</div>
+    <div class="login-sub">บัญชีนี้ยังใช้ PIN เริ่มต้น (12345678) อยู่ — กรุณาตั้ง PIN ใหม่ของตัวเองก่อนใช้งานระบบ ห้ามใช้ 12345678 ซ้ำ</div>
+    <div class="field"><label for="newPin1">PIN ใหม่ (อย่างน้อย 4 หลัก)</label><input type="password" id="newPin1" autocomplete="new-password"></div>
+    <div class="field"><label for="newPin2">ยืนยัน PIN ใหม่</label><input type="password" id="newPin2" autocomplete="new-password"></div>
+    <div class="login-error" id="pinChangeError"></div>
+    <button class="btn btn-block" id="pinChangeBtn" onclick="submitFirstPinChange()">ตั้ง PIN ใหม่และเข้าสู่ระบบ</button>
+  </div>
+</div>
+
 <div id="appScreen">
   <div class="app-shell">
     <div class="sidebar">
@@ -154,6 +166,7 @@
       <div class="sidebar-footer">
         <div class="role-chip">บทบาท: <b id="roleDisplay"></b></div>
         <div class="user-chip" id="userNameDisplay"></div>
+        <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;margin-bottom:6px;" onclick="openChangePinDialog()">เปลี่ยน PIN</button>
         <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;" onclick="doLogout()">ออกจากระบบ</button>
       </div>
     </div>
@@ -181,6 +194,7 @@ function setLoading(msg){ document.getElementById('mainContent').innerHTML = `<d
 function renderErrorState(msg){ document.getElementById('mainContent').innerHTML = `<div class="err-banner">${msg}</div>`; }
 
 /* ================= AUTH ================= */
+let pendingSession = null; // เก็บ session ชั่วคราวระหว่างรอบังคับเปลี่ยน PIN
 async function doLogin(){
   const code=document.getElementById('loginCode').value.trim();
   const pin=document.getElementById('loginPin').value;
@@ -192,14 +206,61 @@ async function doLogin(){
   try{
     const data = await rpc('rpc_login', {p_employee_code:code, p_pin:pin});
     const row = data[0];
-    session = {token:row.token, employee_id:row.employee_id, full_name:row.full_name, role:row.role};
-    sessionStorage.setItem('ptw_session', JSON.stringify(session));
-    enterApp();
+    const newSession = {token:row.token, employee_id:row.employee_id, full_name:row.full_name, role:row.role};
+    if(row.must_change_pin){
+      pendingSession = newSession;
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('pinChangeScreen').style.display='flex';
+      document.getElementById('loginCode').value=''; document.getElementById('loginPin').value='';
+    } else {
+      session = newSession;
+      sessionStorage.setItem('ptw_session', JSON.stringify(session));
+      enterApp();
+    }
   }catch(e){
     errEl.textContent='เข้าสู่ระบบไม่สำเร็จ — ตรวจสอบรหัสพนักงาน/PIN อีกครั้ง';
   }finally{
     btn.disabled=false; btn.textContent='เข้าสู่ระบบ';
   }
+}
+async function submitFirstPinChange(){
+  const p1=document.getElementById('newPin1').value, p2=document.getElementById('newPin2').value;
+  const errEl=document.getElementById('pinChangeError');
+  const btn=document.getElementById('pinChangeBtn');
+  errEl.textContent='';
+  if(p1.length<4){ errEl.textContent='PIN ต้องมีอย่างน้อย 4 หลัก'; return; }
+  if(p1==='12345678'){ errEl.textContent='ห้ามใช้ PIN เริ่มต้น (12345678) กรุณาตั้งค่าใหม่'; return; }
+  if(p1!==p2){ errEl.textContent='PIN ทั้งสองช่องไม่ตรงกัน'; return; }
+  btn.disabled=true; btn.textContent='กำลังบันทึก...';
+  try{
+    session = pendingSession; // ใช้ session ชั่วคราวยิง rpc_change_pin ได้ (login สำเร็จแล้ว)
+    await rpc('rpc_change_pin', {p_session_token:session.token, p_new_pin:p1});
+    sessionStorage.setItem('ptw_session', JSON.stringify(session));
+    pendingSession=null;
+    document.getElementById('pinChangeScreen').style.display='none';
+    document.getElementById('newPin1').value=''; document.getElementById('newPin2').value='';
+    enterApp();
+  }catch(e){
+    errEl.textContent='ตั้ง PIN ใหม่ไม่สำเร็จ กรุณาลองใหม่';
+    session=null;
+  }finally{
+    btn.disabled=false; btn.textContent='ตั้ง PIN ใหม่และเข้าสู่ระบบ';
+  }
+}
+function openChangePinDialog(){
+  const p1 = prompt('ตั้ง PIN ใหม่ (อย่างน้อย 4 หลัก):');
+  if(p1===null) return;
+  if(p1.length<4){ alert('PIN ต้องมีอย่างน้อย 4 หลัก'); return; }
+  const p2 = prompt('พิมพ์ PIN ใหม่อีกครั้งเพื่อยืนยัน:');
+  if(p2===null) return;
+  if(p1!==p2){ alert('PIN ทั้งสองครั้งไม่ตรงกัน'); return; }
+  changePin(p1);
+}
+async function changePin(newPin){
+  try{
+    await rpc('rpc_change_pin', {p_session_token:session.token, p_new_pin:newPin});
+    alert('เปลี่ยน PIN สำเร็จแล้ว');
+  }catch(e){ alert('เปลี่ยน PIN ไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
 async function doLogout(){
   try{ if(session) await rpc('rpc_logout', {p_session_token:session.token}); }catch(e){}
@@ -399,7 +460,7 @@ async function apiUpsertFarmMap(dateStr, line, farm, house, feed, breeder, hatch
 async function apiListDocEvidence(recordType, recordId){ return await rpc('rpc_list_doc_evidence', {p_session_token:session.token, p_record_type:recordType, p_record_id:recordId}); }
 async function apiUpsertDocEvidence(recordType, recordId, station, docNo, link){ return await rpc('rpc_upsert_doc_evidence', {p_session_token:session.token, p_record_type:recordType, p_record_id:recordId, p_station:station, p_doc_no:docNo, p_link:link, p_storage_path:null, p_file_name:null}); }
 async function apiListEmployees(){ return await rpc('rpc_list_employees', {p_session_token:session.token}); }
-async function apiCreateEmployee(code,name,role,pin){ return await rpc('rpc_create_employee', {p_session_token:session.token, p_employee_code:code, p_full_name:name, p_role:role, p_pin:pin}); }
+async function apiCreateEmployee(code,name,role){ return await rpc('rpc_create_employee', {p_session_token:session.token, p_employee_code:code, p_full_name:name, p_role:role}); }
 async function apiSetEmployeeActive(id,active){ return await rpc('rpc_set_employee_active', {p_session_token:session.token, p_employee_id:id, p_active:active}); }
 async function apiGetAuditLog(limit,code,action){ return await rpc('rpc_get_audit_log', {p_session_token:session.token, p_limit:limit||300, p_employee_code:code||null, p_action:action||null}); }
 
@@ -481,7 +542,7 @@ function renderSidebar(){
   h+=navGroup('Production Lot (Lot DLD)', [{key:'prodlot',name:'สร้าง / จัดการ Lot DLD',dot:'util'}]);
   h+=navGroup('IVQF', [{key:'ivqffg',name:'สร้าง LOT FG (IVQF)',dot:'fg'}]);
   h+=navGroup('บรรจุ / จัดเก็บ / จัดส่ง', FINAL_STATIONS.map(s=>({key:s.key,name:s.name,dot:s.ccpNote?'ccp':''})));
-  h+=navGroup('อ้างอิง', [{key:'farmlookup',name:'ตาราง วันที่+ไลน์ → ฟาร์ม',dot:'util'},{key:'farm',name:'ฟาร์มเลี้ยงไก่ (เฟส 2)',dot:'phase2'}]);
+  h+=navGroup('อ้างอิง', [{key:'farmlookup',name:'ตาราง วันที่+Sub Lot → ฟาร์ม',dot:'util'},{key:'farm',name:'ฟาร์มเลี้ยงไก่ (เฟส 2)',dot:'phase2'}]);
   if(isAdmin()){
     h+=navGroup('Admin', [{key:'employees',name:'จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'Audit Log',dot:'admin'}]);
   }
@@ -544,7 +605,7 @@ function renderPhase2(){
   const rows = docs.map(d=>`<tr><td>#${d.no}</td><td>${d.name}</td><td>${d.formNo||'-'}</td><td>${d.fmt||'-'}</td></tr>`).join('');
   document.getElementById('mainContent').innerHTML=`
     <div class="page-eyebrow">FARM</div><div class="page-title">ฟาร์มเลี้ยงไก่</div>
-    <div class="phase2-banner">Station นี้อยู่ในแผนพัฒนาเฟส 2 — ยังไม่เปิดให้บันทึกข้อมูล/เอกสารจริง ปัจจุบันใช้ "ตาราง วันที่+ไลน์ → ฟาร์ม" เป็นตัวเชื่อมชั่วคราวแทน</div>
+    <div class="phase2-banner">Station นี้อยู่ในแผนพัฒนาเฟส 2 — ยังไม่เปิดให้บันทึกข้อมูล/เอกสารจริง ปัจจุบันใช้ "ตาราง วันที่+Sub Lot → ฟาร์ม" เป็นตัวเชื่อมชั่วคราวแทน</div>
     <div class="card">
       <div class="card-title">เอกสารตาม Masterlist ของ Station นี้ (${docs.length} รายการ — อ้างอิงเท่านั้น)</div>
       <table><thead><tr><th>No.</th><th>ชื่อเอกสาร</th><th>Form No.</th><th>รูปแบบปัจจุบัน</th></tr></thead><tbody>${rows}</tbody></table>
@@ -563,8 +624,8 @@ async function renderProdLotPage(){
     const farm = farmMap.find(f=>f.map_date===p.lot_date && String(f.line)===String(p.line));
     return `<tr>
       <td><span class="lotpill">${p.code}<span style="opacity:.7">${p.simple_code}</span></span></td>
-      <td>${p.lot_date}</td><td>ไลน์ ${p.line}</td>
-      <td>${farm?`${farm.farm_name} / ${farm.house_name||'-'}`:'<span style="color:var(--ink-soft)">ยังไม่มีข้อมูล — ไปที่ตาราง วันที่+ไลน์ → ฟาร์ม</span>'}</td>
+      <td>${p.lot_date}</td><td>Sub Lot ${p.line}</td>
+      <td>${farm?`${farm.farm_name} / ${farm.house_name||'-'}`:'<span style="color:var(--ink-soft)">ยังไม่มีข้อมูล — ไปที่ตาราง วันที่+Sub Lot → ฟาร์ม</span>'}</td>
       <td><button class="btn btn-ghost btn-sm" onclick="navigateAndTrace('${p.code}')">Trace</button></td>
     </tr>`;
   }).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Production Lot ในระบบ</div></td></tr>`;
@@ -574,8 +635,8 @@ async function renderProdLotPage(){
       <div class="card-title">สร้าง Production Lot ใหม่</div>
       <div class="form-grid">
         <div class="field"><label>วันที่ผลิต</label><input type="date" id="plDate" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="field"><label>ไลน์การผลิต / กะทำงาน</label>
-          <select id="plLine"><option value="1">ไลน์ 1</option><option value="2">ไลน์ 2</option><option value="3">ไลน์ 3</option><option value="4">ไลน์ 4</option></select>
+        <div class="field"><label>Sub Lot</label>
+          <select id="plLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option></select>
         </div>
       </div>
       <div id="plPreview" style="margin:10px 0 14px;font-size:13px;color:var(--ink-soft);"></div>
@@ -585,11 +646,11 @@ async function renderProdLotPage(){
   document.getElementById('mainContent').innerHTML=`
     <div class="page-eyebrow">Production Lot</div>
     <div class="page-title">สร้าง / จัดการ Lot DLD</div>
-    <div class="page-desc">Lot DLD สร้างจาก <b>พ.ศ. 4 หลัก + วันจูเลียน 3 หลัก + ไลน์การผลิต/กะ 2 หลัก</b> (เช่น 2569227 01) พร้อม Lot อ้างอิงเอกสาร/ใบส่งของแบบ YYMMDD คู่กันเสมอ</div>
+    <div class="page-desc">Lot DLD สร้างจาก <b>พ.ศ. 4 หลัก + วันจูเลียน 3 หลัก + Sub Lot 2 หลัก</b> (เช่น 2569227 01) พร้อม Lot อ้างอิงเอกสาร/ใบส่งของแบบ YYMMDD คู่กันเสมอ</div>
     ${createFormHtml}
     <div class="card">
       <div class="card-title">Production Lot ทั้งหมด (${prod.length})</div>
-      <table><thead><tr><th>Lot DLD / Lot เอกสาร</th><th>วันที่</th><th>ไลน์</th><th>ฟาร์มต้นทาง (จากตารางอ้างอิง)</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th>Lot DLD / Lot เอกสาร</th><th>วันที่</th><th>Sub Lot</th><th>ฟาร์มต้นทาง (จากตารางอ้างอิง)</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     </div>
   `;
   if(canWrite()){
@@ -678,11 +739,11 @@ async function renderFGPage(){
   prod = prod.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
   fgs = fgs.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
 
-  const srcHtml = prod.length ? prod.map(p=>`<label class="source-item"><input type="checkbox" class="rmChk" value="${p.code}"><span class="lotcode">${p.code}</span> — ${p.lot_date} ไลน์ ${p.line}</label>`).join('')
+  const srcHtml = prod.length ? prod.map(p=>`<label class="source-item"><input type="checkbox" class="rmChk" value="${p.code}"><span class="lotcode">${p.code}</span> — ${p.lot_date} Sub Lot ${p.line}</label>`).join('')
     : `<div class="empty">ยังไม่มี Production Lot (RM) ในระบบ</div>`;
   const rows=fgs.map(fg=>`<tr>
     <td class="lotcode fg" onclick="navigateAndTrace('${fg.code}')">${fg.code}</td>
-    <td>${fg.lot_date} / ไลน์ ${fg.line} / Batch ${pad2(fg.batch)}</td>
+    <td>${fg.lot_date} / Sub Lot ${fg.line} / Batch ${pad2(fg.batch)}</td>
     <td>${(fg.rm_sources||[]).map(s=>`<span class="src-tag" onclick="navigateAndTrace('${s}')">${s}</span>`).join('')}</td>
     <td>${(fg.fields||{}).productType||'-'}</td>
     <td>${(fg.fields||{}).allergen||'-'}</td>
@@ -694,7 +755,7 @@ async function renderFGPage(){
       <div class="field full" style="margin-bottom:14px;"><label>เลือก LOT RM ต้นทาง (เลือกได้หลายรายการ)</label><div class="source-box">${srcHtml}</div></div>
       <div class="form-grid">
         <div class="field"><label>วันที่แพ็ค (FG)</label><input type="date" id="fgDate" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="field"><label>ไลน์การผลิต</label><select id="fgLine"><option value="1">ไลน์ 1</option><option value="2">ไลน์ 2</option><option value="3">ไลน์ 3</option><option value="4">ไลน์ 4</option></select></div>
+        <div class="field"><label>Sub Lot</label><select id="fgLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option></select></div>
         <div class="field"><label>เลข Batch</label><input type="number" id="fgBatch" value="1" min="1"></div>
         <div class="field"><label>ประเภทสินค้า</label><select id="fgProductType"><option>สดแช่แข็ง IVQF</option><option>Marinated แช่แข็ง IVQF</option></select></div>
         <div class="field"><label>Lot วัตถุดิบปรุงรส</label><input type="text" id="fgIngredientLot" placeholder="เช่น ING-0077"></div>
@@ -708,11 +769,11 @@ async function renderFGPage(){
   document.getElementById('mainContent').innerHTML=`
     <div class="page-eyebrow">IVQF</div>
     <div class="page-title">สร้าง LOT FG (IVQF)</div>
-    <div class="page-desc">LOT FG มีรูปแบบ พ.ศ.+วันจูเลียน + ไลน์(2หลัก)+Batch(2หลัก) เช่น 2569078 0101 — วันที่ของ LOT FG (วันแพ็ค) กรอกแยกอิสระจาก LOT RM แล้วเลือก LOT RM (Production Lot) ที่ใช้เป็นวัตถุดิบ</div>
+    <div class="page-desc">LOT FG มีรูปแบบ พ.ศ.+วันจูเลียน + Sub Lot(2หลัก)+Batch(2หลัก) เช่น 2569078 0101 — วันที่ของ LOT FG (วันแพ็ค) กรอกแยกอิสระจาก LOT RM แล้วเลือก LOT RM (Production Lot) ที่ใช้เป็นวัตถุดิบ</div>
     ${createFormHtml}
     <div class="card">
       <div class="card-title">LOT FG ทั้งหมด (${fgs.length})</div>
-      <table><thead><tr><th>LOT FG</th><th>วันที่/ไลน์/Batch</th><th>LOT RM ต้นทาง</th><th>ประเภทสินค้า</th><th>Allergen</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th>LOT FG</th><th>วันที่/Sub Lot/Batch</th><th>LOT RM ต้นทาง</th><th>ประเภทสินค้า</th><th>Allergen</th></tr></thead><tbody>${rows}</tbody></table>
     </div>
   `;
   if(canWrite()){
@@ -807,7 +868,7 @@ async function renderFarmLookupPage(){
   try{ farmMap = await apiListFarmMap(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
   farmMap = farmMap.slice().sort((a,b)=> (b.map_date||'').localeCompare(a.map_date||''));
 
-  const rows=farmMap.map(f=>`<tr><td>${f.map_date}</td><td>ไลน์ ${f.line}</td><td>${f.farm_name}</td><td>${f.house_name||'-'}</td><td>${f.feed_lot||'-'}</td><td>${f.breeder_flock||'-'}</td><td>${f.hatchery_batch||'-'}</td></tr>`).join('')
+  const rows=farmMap.map(f=>`<tr><td>${f.map_date}</td><td>Sub Lot ${f.line}</td><td>${f.farm_name}</td><td>${f.house_name||'-'}</td><td>${f.feed_lot||'-'}</td><td>${f.breeder_flock||'-'}</td><td>${f.hatchery_batch||'-'}</td></tr>`).join('')
     || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const createFormHtml = canWrite() ? `
@@ -815,7 +876,7 @@ async function renderFarmLookupPage(){
       <div class="card-title">เพิ่มข้อมูลอ้างอิง</div>
       <div class="form-grid">
         <div class="field"><label>วันที่</label><input type="date" id="fmDate" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="field"><label>ไลน์</label><select id="fmLine"><option value="1">ไลน์ 1</option><option value="2">ไลน์ 2</option><option value="3">ไลน์ 3</option><option value="4">ไลน์ 4</option></select></div>
+        <div class="field"><label>Sub Lot</label><select id="fmLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option></select></div>
         <div class="field"><label>ชื่อฟาร์ม</label><input type="text" id="fmFarm" placeholder="เช่น ฟาร์มบ้านนา"></div>
         <div class="field"><label>เล้า / โรงเรือน</label><input type="text" id="fmHouse" placeholder="เช่น เล้า 4"></div>
         <div class="field"><label>Lot อาหารสัตว์ (เฟส 2)</label><input type="text" id="fmFeed" placeholder="เช่น FEED-2569-0142"></div>
@@ -827,11 +888,11 @@ async function renderFarmLookupPage(){
 
   document.getElementById('mainContent').innerHTML=`
     <div class="page-eyebrow">ตารางอ้างอิง</div>
-    <div class="page-title">วันที่ + ไลน์ → ฟาร์ม → ต้นน้ำ</div>
-    <div class="page-desc">Lot DLD ไม่มีชื่อฟาร์มฝังอยู่ในเลข ต้องใช้ "วันที่ + ไลน์" ไปเทียบกับตารางนี้เพื่อขอเอกสารฟาร์ม และใช้ต่อเนื่องไปหาล็อตอาหารสัตว์ ฝูงพ่อแม่พันธุ์ และโรงฟักไข่ (ข้อมูลเฟส 2)</div>
+    <div class="page-title">วันที่ + Sub Lot → ฟาร์ม → ต้นน้ำ</div>
+    <div class="page-desc">Lot DLD ไม่มีชื่อฟาร์มฝังอยู่ในเลข ต้องใช้ "วันที่ + Sub Lot" ไปเทียบกับตารางนี้เพื่อขอเอกสารฟาร์ม และใช้ต่อเนื่องไปหาล็อตอาหารสัตว์ ฝูงพ่อแม่พันธุ์ และโรงฟักไข่ (ข้อมูลเฟส 2)</div>
     ${createFormHtml}
     <div class="card"><div class="card-title">ตารางอ้างอิงทั้งหมด</div>
-      <table><thead><tr><th>วันที่</th><th>ไลน์</th><th>ฟาร์ม</th><th>เล้า/โรงเรือน</th><th>Lot อาหารสัตว์</th><th>ฝูงพ่อแม่พันธุ์</th><th>ล็อตโรงฟัก</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>Sub Lot</th><th>ฟาร์ม</th><th>เล้า/โรงเรือน</th><th>Lot อาหารสัตว์</th><th>ฝูงพ่อแม่พันธุ์</th><th>ล็อตโรงฟัก</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
 }
 async function addFarmMap(){
@@ -913,8 +974,8 @@ function ccpBadgesForFinal(rec){
 }
 function upstreamNodesFor(prodLot, farmMap){
   const farm = farmMap.find(f=>f.map_date===prodLot.lot_date && String(f.line)===String(prodLot.line));
-  if(!farm) return `<div class="empty-state">ยังไม่มีข้อมูลฟาร์มในตารางอ้างอิงสำหรับวันที่+ไลน์นี้ — ไปกรอกที่เมนู "ตาราง วันที่+ไลน์ → ฟาร์ม"</div>`;
-  let html = nodeHtmlGeneric(`${farm.farm_name} / ${farm.house_name||'-'}`, `ฟาร์มเลี้ยงไก่ (ต้นทางของ Lot นี้) · ${farm.map_date} ไลน์ ${farm.line}`, '', false, false);
+  if(!farm) return `<div class="empty-state">ยังไม่มีข้อมูลฟาร์มในตารางอ้างอิงสำหรับวันที่+Sub Lot นี้ — ไปกรอกที่เมนู "ตาราง วันที่+Sub Lot → ฟาร์ม"</div>`;
+  let html = nodeHtmlGeneric(`${farm.farm_name} / ${farm.house_name||'-'}`, `ฟาร์มเลี้ยงไก่ (ต้นทางของ Lot นี้) · ${farm.map_date} Sub Lot ${farm.line}`, '', false, false);
   if(farm.feed_lot) html += nodeHtmlGeneric(farm.feed_lot, 'Lot อาหารสัตว์ที่ฟาร์มใช้เลี้ยง (เฟส 2)', '', false, false);
   if(farm.breeder_flock) html += nodeHtmlGeneric(farm.breeder_flock, 'ฝูงพ่อแม่พันธุ์ต้นทางของลูกไก่ (เฟส 2)', '', false, false);
   if(farm.hatchery_batch) html += nodeHtmlGeneric(farm.hatchery_batch, 'ล็อตโรงฟักไข่ที่ผลิตลูกไก่ (เฟส 2)', '', false, false);
@@ -946,7 +1007,7 @@ async function runTrace(){
 
   if(prodLot){
     backHtml = upstreamNodesFor(prodLot, farmMap);
-    selfHtml = nodeHtmlGeneric(`${prodLot.code}`, `Production Lot (Lot DLD) · Lot เอกสาร: ${prodLot.simple_code} · ${prodLot.lot_date} ไลน์ ${prodLot.line}`, '', true, false);
+    selfHtml = nodeHtmlGeneric(`${prodLot.code}`, `Production Lot (Lot DLD) · Lot เอกสาร: ${prodLot.simple_code} · ${prodLot.lot_date} Sub Lot ${prodLot.line}`, '', true, false);
 
     let attach=[], finalRecs=[], fgUsing=[];
     try{
@@ -955,7 +1016,7 @@ async function runTrace(){
     }catch(e){}
     attach.sort((a,b)=> ATTACH_STATIONS.findIndex(s=>s.key===a.station) - ATTACH_STATIONS.findIndex(s=>s.key===b.station));
     const fwdAttach = attach.map(r=>nodeHtmlGeneric(ATTACH_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForAttach(r), false, false)).join('');
-    const usedByFg = fgUsing.map(f=>nodeHtmlGeneric(f.code, `ใช้เป็น LOT RM ของ LOT FG · ${f.lot_date} ไลน์ ${f.line} Batch ${pad2(f.batch)}`, '', false, true)).join('');
+    const usedByFg = fgUsing.map(f=>nodeHtmlGeneric(f.code, `ใช้เป็น LOT RM ของ LOT FG · ${f.lot_date} Sub Lot ${f.line} Batch ${pad2(f.batch)}`, '', false, true)).join('');
     const fin = finalRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('');
     fwdHtml = (fwdAttach + usedByFg + fin) || `<div class="empty-state">ยังไม่มีข้อมูลถัดไป</div>`;
 
@@ -963,7 +1024,7 @@ async function runTrace(){
   } else if(fgLot){
     const rmParts = await Promise.all((fgLot.rm_sources||[]).map(async rc=>{
       const rp = prod.find(p=>p.code===rc);
-      let n = nodeHtmlGeneric(rc, `LOT RM (Production Lot) ${rp?`· ${rp.lot_date} ไลน์ ${rp.line}`:''}`, '', false, false);
+      let n = nodeHtmlGeneric(rc, `LOT RM (Production Lot) ${rp?`· ${rp.lot_date} Sub Lot ${rp.line}`:''}`, '', false, false);
       try{
         const attach = await apiListAttachRecords(rc);
         attach.sort((a,b)=> ATTACH_STATIONS.findIndex(s=>s.key===a.station) - ATTACH_STATIONS.findIndex(s=>s.key===b.station));
@@ -974,7 +1035,7 @@ async function runTrace(){
     }));
     backHtml = rmParts.join('') || `<div class="empty-state">ไม่พบ LOT RM ต้นทาง</div>`;
     const fgBadges = fgLot.fields && fgLot.fields.ivqfTempC ? `<span class="badge badge-ccp">CCP อุณหภูมิ IVQF: ${fgLot.fields.ivqfTempC}°C</span>` : '';
-    selfHtml = nodeHtmlGeneric(fgLot.code, `LOT FG (IVQF) · ${(fgLot.fields||{}).productType||''} · ${fgLot.lot_date} ไลน์ ${fgLot.line} Batch ${pad2(fgLot.batch)}`, fgBadges, true, true);
+    selfHtml = nodeHtmlGeneric(fgLot.code, `LOT FG (IVQF) · ${(fgLot.fields||{}).productType||''} · ${fgLot.lot_date} Sub Lot ${fgLot.line} Batch ${pad2(fgLot.batch)}`, fgBadges, true, true);
     let finalRecs=[]; try{ finalRecs = await apiListFinalRecords(null, code); }catch(e){}
     fwdHtml = finalRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('') || `<div class="empty-state">ยังไม่มีข้อมูลถัดไป</div>`;
   }
@@ -1022,7 +1083,7 @@ async function renderDailyStatusPage(selectedDate){
   const rowParts = await Promise.all(lots.map(async p=>{
     const statuses = await Promise.all(ATTACH_STATIONS.map(s=>aggregatedDocStatus(s.key, p.code, allAttachRecs)));
     const cells = statuses.map(statusCellHtml).join('');
-    return { row: `<tr><td class="lotcode" onclick="navigateAndTrace('${p.code}')">${p.code}<div class="lotsub">ไลน์ ${p.line} · ${p.simple_code}</div></td>${cells}</tr>`,
+    return { row: `<tr><td class="lotcode" onclick="navigateAndTrace('${p.code}')">${p.code}<div class="lotsub">Sub Lot ${p.line} · ${p.simple_code}</div></td>${cells}</tr>`,
              incomplete: statuses.some(s=>!s.hasData || s.done<s.total) };
   }));
   const rows = rowParts.map(r=>r.row).join('') || `<tr><td colspan="${ATTACH_STATIONS.length+1}"><div class="empty-state">ไม่มี Production Lot ในวันที่เลือก</div></td></tr>`;
@@ -1129,16 +1190,16 @@ async function renderEmployeesPage(){
     <div class="page-desc">สร้าง User ใหม่และกำหนดบทบาท — เมนูนี้เห็นเฉพาะ Admin เท่านั้น</div>
     <div class="card">
       <div class="card-title">สร้างผู้ใช้งานใหม่</div>
+      <div class="note-banner" style="margin-bottom:14px;">PIN เริ่มต้นของผู้ใช้งานใหม่ทุกคนคือ <b>12345678</b> — ระบบจะบังคับให้ตั้ง PIN ใหม่ทันทีที่ Login ครั้งแรก</div>
       <div class="form-grid">
         <div class="field"><label>รหัสพนักงาน</label><input type="text" id="empCode" placeholder="เช่น QC1032"></div>
         <div class="field"><label>ชื่อ-นามสกุล</label><input type="text" id="empName"></div>
-        <div class="field"><label>บทบาท</label><select id="empRole">
+        <div class="field full"><label>บทบาท</label><select id="empRole">
           <option value="QC">QC / PRD (บันทึกข้อมูล)</option>
           <option value="QA">QA / Manager (อ่านอย่างเดียว)</option>
           <option value="AUDITOR">Auditor (อ่านอย่างเดียว)</option>
           <option value="ADMIN">Admin (ทำได้ทุกอย่าง)</option>
         </select></div>
-        <div class="field"><label>PIN เริ่มต้น</label><input type="text" id="empPin" placeholder="ตั้งรหัสเริ่มต้น ให้ผู้ใช้เปลี่ยนภายหลัง"></div>
       </div>
       <button class="btn" style="margin-top:10px;" onclick="createEmployee()">สร้างผู้ใช้งาน</button>
       <div id="empCreateMsg" style="margin-top:10px;font-size:13px;"></div>
@@ -1153,12 +1214,11 @@ async function createEmployee(){
   const code=document.getElementById('empCode').value.trim();
   const name=document.getElementById('empName').value.trim();
   const role=document.getElementById('empRole').value;
-  const pin=document.getElementById('empPin').value;
   const msg=document.getElementById('empCreateMsg');
-  if(!code||!name||!pin){ msg.textContent='กรุณากรอกให้ครบ'; msg.style.color='var(--red-600)'; return; }
+  if(!code||!name){ msg.textContent='กรุณากรอกให้ครบ'; msg.style.color='var(--red-600)'; return; }
   try{
-    await apiCreateEmployee(code,name,role,pin);
-    msg.textContent='สร้างผู้ใช้งานสำเร็จ'; msg.style.color='var(--green-700)';
+    await apiCreateEmployee(code,name,role);
+    msg.textContent='สร้างผู้ใช้งานสำเร็จ — PIN เริ่มต้นคือ 12345678'; msg.style.color='var(--green-700)';
     renderEmployeesPage();
   }catch(e){ msg.textContent='สร้างไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด (อาจมีรหัสพนักงานนี้อยู่แล้ว)'); msg.style.color='var(--red-600)'; }
 }
