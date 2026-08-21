@@ -448,15 +448,17 @@ const STATION_DOCS = {
 };
 /* ================= API WRAPPERS (เรียก RPC ใน Supabase — Patch 1) ================= */
 async function apiListProdLots(date){ return await rpc('rpc_list_production_lots', {p_session_token:session.token, p_date:date||null}); }
-async function apiCreateProdLot(dateStr, line){ return await rpc('rpc_create_production_lot', {p_session_token:session.token, p_lot_date:dateStr, p_line:Number(line)}); }
+async function apiCreateProdLot(dateStr, line){ return await rpc('rpc_create_production_lot', {p_session_token:session.token, p_lot_date:dateStr, p_line:line}); }
+async function apiUpdateProdLot(oldCode, newDate, newLine){ return await rpc('rpc_update_production_lot', {p_session_token:session.token, p_old_code:oldCode, p_new_date:newDate, p_new_line:newLine}); }
+async function apiDeleteProdLot(code){ return await rpc('rpc_delete_production_lot', {p_session_token:session.token, p_code:code}); }
 async function apiListAttachRecords(lotCode, station){ return await rpc('rpc_list_attach_records', {p_session_token:session.token, p_prod_lot_code:lotCode||null, p_station:station||null}); }
 async function apiCreateAttachRecord(lotCode, station, fields){ return await rpc('rpc_create_attach_record', {p_session_token:session.token, p_prod_lot_code:lotCode, p_station:station, p_fields:fields}); }
 async function apiListFgLots(){ return await rpc('rpc_list_fg_lots', {p_session_token:session.token}); }
-async function apiCreateFgLot(dateStr, line, batch, rmSources, fields){ return await rpc('rpc_create_fg_lot', {p_session_token:session.token, p_lot_date:dateStr, p_line:Number(line), p_batch:Number(batch), p_rm_sources:rmSources, p_fields:fields}); }
+async function apiCreateFgLot(dateStr, line, batch, rmSources, fields){ return await rpc('rpc_create_fg_lot', {p_session_token:session.token, p_lot_date:dateStr, p_line:line, p_batch:Number(batch), p_rm_sources:rmSources, p_fields:fields}); }
 async function apiListFinalRecords(station, sourceCode){ return await rpc('rpc_list_final_records', {p_session_token:session.token, p_station:station||null, p_source_code:sourceCode||null}); }
 async function apiCreateFinalRecord(station, sourceCodes, fields){ return await rpc('rpc_create_final_record', {p_session_token:session.token, p_station:station, p_source_codes:sourceCodes, p_fields:fields}); }
 async function apiListFarmMap(){ return await rpc('rpc_list_farm_map', {p_session_token:session.token}); }
-async function apiUpsertFarmMap(dateStr, line, farm, house, feed, breeder, hatch){ return await rpc('rpc_upsert_farm_map', {p_session_token:session.token, p_map_date:dateStr, p_line:Number(line), p_farm_name:farm, p_house_name:house, p_feed_lot:feed||null, p_breeder_flock:breeder||null, p_hatchery_batch:hatch||null}); }
+async function apiUpsertFarmMap(dateStr, line, farm, house, feed, breeder, hatch){ return await rpc('rpc_upsert_farm_map', {p_session_token:session.token, p_map_date:dateStr, p_line:line, p_farm_name:farm, p_house_name:house, p_feed_lot:feed||null, p_breeder_flock:breeder||null, p_hatchery_batch:hatch||null}); }
 async function apiListDocEvidence(recordType, recordId){ return await rpc('rpc_list_doc_evidence', {p_session_token:session.token, p_record_type:recordType, p_record_id:recordId}); }
 async function apiUpsertDocEvidence(recordType, recordId, station, docNo, link){ return await rpc('rpc_upsert_doc_evidence', {p_session_token:session.token, p_record_type:recordType, p_record_id:recordId, p_station:station, p_doc_no:docNo, p_link:link, p_storage_path:null, p_file_name:null}); }
 async function apiListEmployees(){ return await rpc('rpc_list_employees', {p_session_token:session.token}); }
@@ -622,11 +624,14 @@ async function renderProdLotPage(){
 
   const rows = prod.map(p=>{
     const farm = farmMap.find(f=>f.map_date===p.lot_date && String(f.line)===String(p.line));
+    const adminBtns = isAdmin() ? `
+      <button class="btn btn-ghost btn-sm" onclick="editProdLot('${p.code}','${p.lot_date}','${p.line}')">แก้ไข</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--red-600);" onclick="deleteProdLot('${p.code}')">ลบ</button>` : '';
     return `<tr>
       <td><span class="lotpill">${p.code}<span style="opacity:.7">${p.simple_code}</span></span></td>
       <td>${p.lot_date}</td><td>Sub Lot ${p.line}</td>
       <td>${farm?`${farm.farm_name} / ${farm.house_name||'-'}`:'<span style="color:var(--ink-soft)">ยังไม่มีข้อมูล — ไปที่ตาราง วันที่+Sub Lot → ฟาร์ม</span>'}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="navigateAndTrace('${p.code}')">Trace</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="navigateAndTrace('${p.code}')">Trace</button>${adminBtns}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Production Lot ในระบบ</div></td></tr>`;
 
@@ -636,7 +641,7 @@ async function renderProdLotPage(){
       <div class="form-grid">
         <div class="field"><label>วันที่ผลิต</label><input type="date" id="plDate" value="${new Date().toISOString().slice(0,10)}"></div>
         <div class="field"><label>Sub Lot</label>
-          <select id="plLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option></select>
+          <select id="plLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option><option value="99H">Sub Lot 99H (ข้อมูลทดสอบ)</option></select>
         </div>
       </div>
       <div id="plPreview" style="margin:10px 0 14px;font-size:13px;color:var(--ink-soft);"></div>
@@ -669,6 +674,27 @@ async function createProdLot(){
   if(!d){ alert('กรุณาระบุวันที่'); return; }
   try{ await apiCreateProdLot(d, l); renderProdLotPage(); }
   catch(e){ alert('สร้างไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+async function editProdLot(code, currentDate, currentLine){
+  const newDate = prompt('แก้วันที่ผลิต (YYYY-MM-DD):', currentDate);
+  if(newDate===null) return;
+  const newLine = prompt('แก้ Sub Lot (เช่น 1, 2, 3, 4, 99H):', currentLine);
+  if(newLine===null) return;
+  if(!newDate || !newLine){ alert('กรุณากรอกให้ครบ'); return; }
+  if(!confirm(`ยืนยันแก้ไข Lot ${code} เป็นวันที่ ${newDate} / Sub Lot ${newLine}?\nเลข Lot DLD จะเปลี่ยนตามทันที และข้อมูลทุก Station ที่ผูกกับ Lot นี้จะย้ายตามไปด้วยอัตโนมัติ`)) return;
+  try{
+    const updated = await apiUpdateProdLot(code, newDate, newLine);
+    alert(`แก้ไขสำเร็จ — เลข Lot DLD ใหม่คือ ${updated.code}`);
+    renderProdLotPage();
+  }catch(e){ alert('แก้ไขไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+async function deleteProdLot(code){
+  if(!confirm(`ยืนยันลบ Production Lot ${code}?\nข้อมูลทุก Station ที่บันทึกไว้ของ Lot นี้จะถูกลบไปด้วย การกระทำนี้ย้อนกลับไม่ได้`)) return;
+  try{
+    await apiDeleteProdLot(code);
+    alert('ลบสำเร็จ');
+    renderProdLotPage();
+  }catch(e){ alert('ลบไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด (อาจมี LOT FG หรือรายการส่งมอบที่อ้างอิง Lot นี้อยู่ ต้องลบสิ่งเหล่านั้นก่อน)')); }
 }
 
 /* ================= 7-Station Accordion ผูกกับ Lot เฉพาะ (แสดงใต้ Trace Query) ================= */
@@ -755,7 +781,7 @@ async function renderFGPage(){
       <div class="field full" style="margin-bottom:14px;"><label>เลือก LOT RM ต้นทาง (เลือกได้หลายรายการ)</label><div class="source-box">${srcHtml}</div></div>
       <div class="form-grid">
         <div class="field"><label>วันที่แพ็ค (FG)</label><input type="date" id="fgDate" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="field"><label>Sub Lot</label><select id="fgLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option></select></div>
+        <div class="field"><label>Sub Lot</label><select id="fgLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option><option value="99H">Sub Lot 99H (ข้อมูลทดสอบ)</option></select></div>
         <div class="field"><label>เลข Batch</label><input type="number" id="fgBatch" value="1" min="1"></div>
         <div class="field"><label>ประเภทสินค้า</label><select id="fgProductType"><option>สดแช่แข็ง IVQF</option><option>Marinated แช่แข็ง IVQF</option></select></div>
         <div class="field"><label>Lot วัตถุดิบปรุงรส</label><input type="text" id="fgIngredientLot" placeholder="เช่น ING-0077"></div>
@@ -876,7 +902,7 @@ async function renderFarmLookupPage(){
       <div class="card-title">เพิ่มข้อมูลอ้างอิง</div>
       <div class="form-grid">
         <div class="field"><label>วันที่</label><input type="date" id="fmDate" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="field"><label>Sub Lot</label><select id="fmLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option></select></div>
+        <div class="field"><label>Sub Lot</label><select id="fmLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option><option value="99H">Sub Lot 99H (ข้อมูลทดสอบ)</option></select></div>
         <div class="field"><label>ชื่อฟาร์ม</label><input type="text" id="fmFarm" placeholder="เช่น ฟาร์มบ้านนา"></div>
         <div class="field"><label>เล้า / โรงเรือน</label><input type="text" id="fmHouse" placeholder="เช่น เล้า 4"></div>
         <div class="field"><label>Lot อาหารสัตว์ (เฟส 2)</label><input type="text" id="fmFeed" placeholder="เช่น FEED-2569-0142"></div>
