@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบทวนสอบย้อนกลับไก่เนื้อ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --ink:#1B2421; --ink-soft:#4B5650; --paper:#F6F5F0; --card:#FFFFFF; --line:#DEDCD2;
+    --teal-900:#04342C; --teal-700:#0F6E56; --teal-500:#1D9E75; --teal-100:#E1F5EE;
+    --amber-700:#854F0B; --amber-500:#BA7517; --amber-100:#FAEEDA;
+    --gray-500:#888780; --gray-100:#F1EFE8;
+    --red-600:#A32D2D; --red-100:#FCEBEB; --green-700:#27500A; --green-100:#EAF3DE;
+    --purple-700:#4A3F9E; --purple-100:#EBE8FB;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Sarabun',sans-serif;background:var(--paper);color:var(--ink);}
+  #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--teal-900),#08221D);}
+  .login-card{background:var(--card);border-radius:16px;padding:44px 40px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .login-eyebrow{font-size:12px;letter-spacing:.08em;color:var(--teal-500);font-weight:600;text-transform:uppercase;}
+  .login-title{font-size:24px;font-weight:700;margin:6px 0 4px;}
+  .login-sub{font-size:14px;color:var(--ink-soft);margin-bottom:26px;line-height:1.6;}
+  .login-error{font-size:13px;color:var(--red-600);margin:-8px 0 14px;min-height:16px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink-soft);}
+  select, input[type=text], input[type=number], input[type=date], input[type=password]{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+    font-family:'Sarabun',sans-serif;font-size:14px;background:#fff;color:var(--ink);
+  }
+  select:focus, input:focus{outline:2px solid var(--teal-500);outline-offset:1px;border-color:var(--teal-500);}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--teal-700);color:#fff;border:none;border-radius:8px;padding:11px 18px;font-family:'Sarabun',sans-serif;font-weight:600;font-size:14px;cursor:pointer;transition:background .15s;}
+  .btn:hover{background:var(--teal-900);}
+  .btn:disabled{background:var(--gray-500);cursor:not-allowed;}
+  .btn-block{width:100%;}
+  .btn-ghost{background:transparent;color:var(--ink-soft);border:1px solid var(--line);}
+  .btn-ghost:hover{background:var(--gray-100);color:var(--ink);}
+  .btn-sm{padding:7px 12px;font-size:13px;}
+  #appScreen{display:none;min-height:100vh;}
+  .app-shell{display:flex;min-height:100vh;}
+  .sidebar{width:260px;flex-shrink:0;background:var(--teal-900);color:#EDEEE8;padding:22px 14px;display:flex;flex-direction:column;overflow-y:auto;}
+  .brand{padding:0 10px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:6px;}
+  .brand-name{font-weight:700;font-size:15px;}
+  .brand-sub{font-size:11px;color:#8FBBB0;margin-top:2px;}
+  .nav-group-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#7FA79C;padding:14px 10px 6px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:#D6E4DF;margin-bottom:2px;}
+  .nav-item:hover{background:rgba(255,255,255,.08);}
+  .nav-item.active{background:#0F6E56;color:#fff;font-weight:600;}
+  .nav-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--teal-500);}
+  .nav-dot.ccp{background:var(--amber-500);}
+  .nav-dot.phase2{background:var(--gray-500);}
+  .nav-dot.util{background:#7F77DD;}
+  .nav-dot.fg{background:#C24DA0;}
+  .nav-dot.admin{background:#E05A5A;}
+  .sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);}
+  .role-chip{font-size:12px;color:#B9CFC8;margin-bottom:2px;}
+  .role-chip b{color:#fff;}
+  .user-chip{font-size:11px;color:#8FBBB0;margin-bottom:8px;}
+  .main{flex:1;padding:30px 40px;max-width:1100px;}
+  .page-eyebrow{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--teal-700);}
+  .page-title{font-size:24px;font-weight:700;margin:4px 0 4px;}
+  .page-desc{font-size:14px;color:var(--ink-soft);margin-bottom:22px;max-width:680px;line-height:1.6;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;margin-bottom:20px;}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:14px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;}
+  .form-grid .field.full{grid-column:1/-1;}
+  .ccp-field label{color:var(--amber-700);}
+  .ccp-field input,.ccp-field select{border-color:var(--amber-500);}
+  .source-box{border:1px dashed var(--line);border-radius:8px;padding:12px 14px;background:var(--gray-100);max-height:220px;overflow-y:auto;}
+  .source-box .empty{font-size:13px;color:var(--ink-soft);}
+  .source-item{display:flex;align-items:center;gap:8px;font-size:13.5px;padding:4px 0;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;font-weight:600;color:var(--ink-soft);font-size:12px;text-transform:uppercase;letter-spacing:.03em;padding:8px 10px;border-bottom:2px solid var(--line);}
+  td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .lotcode{font-weight:700;color:var(--teal-900);cursor:pointer;}
+  .lotcode.fg{color:var(--purple-700);}
+  .lotsub{font-size:11.5px;color:var(--ink-soft);font-family:monospace;}
+  .badge{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px;margin:1px 3px 1px 0;}
+  .badge-pass{background:var(--green-100);color:var(--green-700);}
+  .badge-fail{background:var(--red-100);color:var(--red-600);}
+  .badge-ccp{background:var(--amber-100);color:var(--amber-700);}
+  .badge-fg{background:var(--purple-100);color:var(--purple-700);}
+  .src-tag{display:inline-block;font-size:12px;background:var(--teal-100);color:var(--teal-700);padding:2px 7px;border-radius:6px;margin:1px 3px 1px 0;cursor:pointer;}
+  .src-tag.fg{background:var(--purple-100);color:var(--purple-700);}
+  .empty-state{padding:30px 10px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .grid-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .stat-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;cursor:pointer;transition:border-color .15s, transform .1s;}
+  .stat-card:hover{border-color:var(--teal-500);transform:translateY(-1px);}
+  .stat-card .num{font-size:26px;font-weight:700;color:var(--teal-900);}
+  .stat-card .lbl{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .stat-card .tag{display:inline-block;margin-top:8px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;}
+  .trace-search{display:flex;gap:10px;margin-bottom:20px;}
+  .trace-search input{flex:1;}
+  .trace-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .trace-col h4{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);margin:0 0 10px;}
+  .trace-node{border-left:3px solid var(--teal-500);background:var(--card);border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:8px;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .trace-node.self{border-left-color:var(--amber-500);background:var(--amber-100);}
+  .trace-node.fg{border-left-color:var(--purple-700);}
+  .trace-node .st{font-size:11.5px;color:var(--ink-soft);}
+  .trace-node .code{font-weight:700;font-size:14px;}
+  .note-banner{background:var(--teal-100);color:var(--teal-900);border-radius:8px;padding:12px 16px;font-size:13.5px;margin-bottom:18px;}
+  .warn-banner{background:var(--amber-100);color:var(--amber-700);border-radius:8px;padding:12px 16px;font-size:13.5px;margin-bottom:18px;}
+  .err-banner{background:var(--red-100);color:var(--red-600);border-radius:8px;padding:12px 16px;font-size:13.5px;margin-bottom:18px;}
+  .phase2-banner{background:var(--gray-100);color:var(--ink-soft);border-radius:8px;padding:30px;text-align:center;font-size:14px;}
+  .lotpill{display:inline-flex;flex-direction:column;font-family:monospace;background:var(--teal-100);color:var(--teal-900);border-radius:6px;padding:6px 10px;font-size:12.5px;}
+  details.docbox{margin:0;}
+  details.docbox summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--teal-700);list-style:none;display:flex;align-items:center;gap:5px;}
+  details.docbox summary::before{content:'▸';font-size:10px;}
+  details.docbox[open] summary::before{content:'▾';}
+  details.docbox summary::-webkit-details-marker{display:none;}
+  .doclist{max-height:260px;overflow-y:auto;margin-top:8px;min-width:280px;border:1px solid var(--line);border-radius:8px;background:var(--gray-100);}
+  .doc-item{display:flex;align-items:flex-start;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:12.5px;}
+  .doc-item:last-child{border-bottom:none;}
+  .doc-name{font-weight:600;color:var(--ink);display:block;}
+  .doc-meta{color:var(--ink-soft);font-size:11px;display:block;margin-top:1px;}
+  .doc-meta .badge{margin:1px 3px 0 0;font-size:10px;padding:1px 6px;}
+  details.station-acc{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;background:var(--card);overflow:hidden;}
+  details.station-acc summary{cursor:pointer;padding:12px 16px;font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;gap:8px;background:var(--gray-100);}
+  details.station-acc summary::-webkit-details-marker{display:none;}
+  details.station-acc summary::before{content:'▸';font-size:11px;color:var(--ink-soft);}
+  details.station-acc[open] summary::before{content:'▾';}
+  .acc-count{margin-left:auto;font-size:12px;font-weight:500;color:var(--ink-soft);}
+  .acc-body{padding:14px 16px;}
+  .existing-rec{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--paper);}
+  .existing-rec .st{font-size:11.5px;color:var(--ink-soft);margin-bottom:4px;}
+  .existing-rec .kv{display:inline-block;font-size:12.5px;margin:1px 10px 1px 0;}
+  .readonly-banner{background:var(--purple-100);color:var(--purple-700);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-eyebrow">Traceability System</div>
+    <div class="login-title">เข้าสู่ระบบ</div>
+    <div class="login-sub">ระบบทวนสอบย้อนกลับผลิตภัณฑ์ไก่เนื้อ — เชื่อมต่อ Supabase จริง</div>
+    <div class="field"><label for="loginCode">รหัสพนักงาน</label><input type="text" id="loginCode" placeholder="เช่น QC1032" autocomplete="username"></div>
+    <div class="field"><label for="loginPin">PIN</label><input type="password" id="loginPin" placeholder="รหัส PIN" autocomplete="current-password"></div>
+    <div class="login-error" id="loginError"></div>
+    <button class="btn btn-block" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
+  </div>
+</div>
+
+<div id="appScreen">
+  <div class="app-shell">
+    <div class="sidebar">
+      <div class="brand"><div class="brand-name">Traceability System</div><div class="brand-sub">ระบบทวนสอบย้อนกลับไก่เนื้อ</div></div>
+      <div id="navContainer"></div>
+      <div class="sidebar-footer">
+        <div class="role-chip">บทบาท: <b id="roleDisplay"></b></div>
+        <div class="user-chip" id="userNameDisplay"></div>
+        <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;" onclick="doLogout()">ออกจากระบบ</button>
+      </div>
+    </div>
+    <div class="main" id="mainContent"></div>
+  </div>
+</div>
+
+<script>
+/* ================= SUPABASE CONNECTION ================= */
+const SUPABASE_URL = 'https://ppyumdyuiltqmdpkccmo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBweXVtZHl1aWx0cW1kcGtjY21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNzE2NTAsImV4cCI6MjEwMjg0NzY1MH0.pBMU330OjxZyjFMwcnbKLeTapD24NlpWSz4XqTJUTHE';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let session = null; // {token, employee_id, full_name, role}
+const ROLE_LABEL = {ADMIN:'Admin (ผู้ดูแลระบบ)', AUDITOR:'Auditor (อ่านอย่างเดียว)', QA:'QA / Manager', QC:'QC / PRD'};
+
+async function rpc(fnName, params){
+  const { data, error } = await sb.rpc(fnName, params);
+  if(error){ console.error(fnName, error); throw error; }
+  return data;
+}
+function canWrite(){ return !!session && (session.role==='QC' || session.role==='ADMIN'); }
+function isAdmin(){ return !!session && session.role==='ADMIN'; }
+function setLoading(msg){ document.getElementById('mainContent').innerHTML = `<div class="empty-state" style="padding:60px 0;">${msg||'กำลังโหลดข้อมูล...'}</div>`; }
+function renderErrorState(msg){ document.getElementById('mainContent').innerHTML = `<div class="err-banner">${msg}</div>`; }
+
+/* ================= AUTH ================= */
+async function doLogin(){
+  const code=document.getElementById('loginCode').value.trim();
+  const pin=document.getElementById('loginPin').value;
+  const errEl=document.getElementById('loginError');
+  const btn=document.getElementById('loginBtn');
+  errEl.textContent='';
+  if(!code || !pin){ errEl.textContent='กรุณากรอกรหัสพนักงานและ PIN'; return; }
+  btn.disabled=true; btn.textContent='กำลังเข้าสู่ระบบ...';
+  try{
+    const data = await rpc('rpc_login', {p_employee_code:code, p_pin:pin});
+    const row = data[0];
+    session = {token:row.token, employee_id:row.employee_id, full_name:row.full_name, role:row.role};
+    sessionStorage.setItem('ptw_session', JSON.stringify(session));
+    enterApp();
+  }catch(e){
+    errEl.textContent='เข้าสู่ระบบไม่สำเร็จ — ตรวจสอบรหัสพนักงาน/PIN อีกครั้ง';
+  }finally{
+    btn.disabled=false; btn.textContent='เข้าสู่ระบบ';
+  }
+}
+async function doLogout(){
+  try{ if(session) await rpc('rpc_logout', {p_session_token:session.token}); }catch(e){}
+  session=null; sessionStorage.removeItem('ptw_session');
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('loginCode').value=''; document.getElementById('loginPin').value='';
+}
+function enterApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('roleDisplay').textContent = ROLE_LABEL[session.role] || session.role;
+  document.getElementById('userNameDisplay').textContent = session.full_name + ' (' + session.employee_id.slice(0,8) + ')';
+  navigateTo('dashboard');
+}
+window.addEventListener('DOMContentLoaded', ()=>{
+  const saved = sessionStorage.getItem('ptw_session');
+  if(saved){ try{ session=JSON.parse(saved); enterApp(); }catch(e){} }
+});
+
+/* ================= LOT NUMBER HELPERS (client-side preview เท่านั้น เลขจริงคำนวณใน RPC) ================= */
+function pad(n,len){return String(n).padStart(len,'0');}
+function dayOfYear(d){ const start=new Date(d.getFullYear(),0,0); return Math.floor((d-start)/86400000); }
+function buddhistYear(d){ return d.getFullYear()+543; }
+function parseDate(dateStr){ return new Date(dateStr+'T00:00:00'); }
+function genProdLotCode(dateStr, line){ const d=parseDate(dateStr); return `${buddhistYear(d)}${pad(dayOfYear(d),3)} ${pad(line,2)}`; }
+function genSimpleLot(dateStr, line){ const d=parseDate(dateStr); return `${String(d.getFullYear()).slice(-2)}${pad(d.getMonth()+1,2)}${pad(d.getDate(),2)}${pad(line,2)}`; }
+function genFGCode(dateStr, line, batch){ const d=parseDate(dateStr); return `${buddhistYear(d)}${pad(dayOfYear(d),3)} ${pad(line,2)}${pad(batch,2)}`; }
+function pad2(n){return String(n).padStart(2,'0');}
+
+/* ================= STATION CONFIG ================= */
+const ATTACH_STATIONS = [
+  {key:'receiving', name:'รับไก่-ลวกถอนขน', dept:'LB / QRM', fields:[
+    {id:'farmSource', label:'ฟาร์มต้นทาง', type:'text'},
+    {id:'birdCount', label:'จำนวนไก่ (ตัว)', type:'number'},
+    {id:'truckPlate', label:'ทะเบียนรถขนส่ง', type:'text'},
+  ]},
+  {key:'evisceration', name:'ล้วง-ล้างซาก', dept:'EVI / QRM', ccpNote:'CCP 1', fields:[
+    {id:'weightIn', label:'น้ำหนักเข้า (กก.)', type:'number'},
+    {id:'weightOut', label:'น้ำหนักออก (กก.)', type:'number'},
+    {id:'ccp1Result', label:'ผลตรวจ CCP 1', type:'select', options:['ผ่าน','ไม่ผ่าน'], ccp:'CCP1'},
+  ]},
+  {key:'chiller', name:'Chiller', dept:'CHILLER / QPT', ccpNote:'CCP 2 + CCP 3', fields:[
+    {id:'productType', label:'ชนิดผลิตภัณฑ์', type:'select', options:['ซากไก่','กึ๋น','ขาซี','ปีก (China product)']},
+    {id:'tempC', label:'CCP 2 — อุณหภูมิ (°C)', type:'number', ccp:'CCP2'},
+    {id:'metalDetect', label:'CCP 3 — ผลตรวจโลหะ', type:'select', options:['ผ่าน','ไม่ผ่าน'], ccp:'CCP3'},
+  ]},
+  {key:'cutting', name:'เลาะกระดูก', dept:'CUT', fields:[
+    {id:'subLotNote', label:'หมายเหตุ SUB LOT ภายใน', type:'text'},
+  ]},
+  {key:'specialcut', name:'ตัดแต่งพิเศษ + ปรุงรส', dept:'SC / QPT', fields:[
+    {id:'productType', label:'ประเภทสินค้า', type:'select', options:['สดแช่เย็น','สดแช่แข็ง','Marinated แช่แข็ง']},
+    {id:'ingredientLot', label:'Lot วัตถุดิบปรุงรส', type:'text'},
+    {id:'allergen', label:'สารก่อภูมิแพ้ (ถ้ามี)', type:'text'},
+  ]},
+  {key:'bagprep', name:'เตรียมถุง', dept:'PACK / PKG / QPD', fields:[
+    {id:'bagLot', label:'Lot ถุง/บรรจุภัณฑ์', type:'text'},
+  ]},
+  {key:'freezing', name:'ปิดผนึก — Freezing (สินค้าปกติ)', dept:'FRZ / QPT', ccpNote:'CCP 3', fields:[
+    {id:'metalDetect', label:'CCP 3 — ผลตรวจโลหะ', type:'select', options:['ผ่าน','ไม่ผ่าน'], ccp:'CCP3'},
+  ]},
+];
+const FINAL_STATIONS = [
+  {key:'boxing', name:'ลงกล่อง', dept:'QPD / PACK', ccpNote:'CCP 3', fields:[
+    {id:'boxCode', label:'รหัสกล่อง', type:'text'},
+    {id:'metalDetect', label:'CCP 3 — ผลตรวจโลหะ', type:'select', options:['ผ่าน','ไม่ผ่าน'], ccp:'CCP3'},
+  ]},
+  {key:'coldstorage', name:'Cold Storage', dept:'CS', fields:[
+    {id:'location', label:'ตำแหน่งจัดเก็บ', type:'text'},
+  ]},
+  {key:'shipment', name:'ส่งมอบ / Loading', dept:'QLD', fields:[
+    {id:'customer', label:'ลูกค้า / ร้านค้า', type:'text'},
+    {id:'doNumber', label:'เลขที่ใบส่งของ', type:'text'},
+  ]},
+];
+const ATTACH_MAP = Object.fromEntries(ATTACH_STATIONS.map(s=>[s.key,s]));
+const FINAL_MAP = Object.fromEntries(FINAL_STATIONS.map(s=>[s.key,s]));
+
+/* ================= MASTERLIST เอกสารจริงต่อ Station (82 รายการ) ================= */
+const STATION_DOCS = {
+  farm: [
+    {no:'1', name:`ใบรับส่งลูกไก่และใบตรวจสอบคุณภาพลูกไก่`, formNo:'FR-CH-02-005', fmt:'กระดาษตั๋ว', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'2', name:`ใบหน้าเล้า`, formNo:'FR-EXT-03-003', fmt:'Excel', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'3', name:`การตรวจสอบการทำงานในโรงเรือนไก่ (แบบ 2)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'4', name:`ใบวัคซีน+Cer วัคซีน`, formNo:'FR-EXT-03-012', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'5', name:`บันทึกสัตวพาหะ`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'6', name:`ใบชั่งขายอาหารไก่ + ตั๋วส่งอาหารไก่`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'7', name:`COA อาหารไก่ ได้แก่ ผล% ไขมัน โปรตีน ในอาหาร, ผลจุลินทรีย์`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'8', name:`ใบขึ้นทะเบียนอาหารสัตว์`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'9', name:`ร.3 ลูกไก่มาฟาร์ม`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'10', name:`ผลจุลินทรีย์ พื้น ตะกร้า คอลโซล รถส่งลูกไก่`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'11', name:`ผล NDAI ลูกไก่`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'12', name:`ใบรับรองว่าลูกไก่มาจากโรงฟักไหน`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'13', name:`ผลน้ำประจำปี`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'14', name:`ใบเตรียมโรงเรือน`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+  ],
+  receiving: [
+    {no:'15', name:`คิวไก่`, formNo:'FR-RM-01-012', fmt:'Excel', erp:'มี', mb:'ใช้', qdoc:'ใช้'},
+    {no:'16', name:`สพส.001`, formNo:'BLSC 001', fmt:'Ecertify กรมปศุสัตว์', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'17', name:`ใบเคลื่อนย้าย (ร.3)`, formNo:'BLSC 002', fmt:'Ecertify กรมปศุสัตว์', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'18', name:`ใบมาตรฐานฟาร์ม (GAP)`, formNo:'BLSC 003', fmt:'Ecertify กรมปศุสัตว์', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'19', name:`ผลแลป ND/AI ที่ฟาร์ม`, formNo:'ใบตอบผลแลป', fmt:'Ecertify กรมปศุสัตว์', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'20', name:`Boot swab`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'21', name:`MA`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'22', name:`รายงาน Ante-Mortem`, formNo:'FR-QRM-01-007', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'23', name:`รายงาน Animal welfare Check 1`, formNo:'FR-QRM-01-043', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'24', name:`รายงาน Animal welfare Check 2`, formNo:'FR-QRM-01-080', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'25', name:`รายงาน Animal welfare Check 3`, formNo:'FR-QRM-01-051', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'26', name:`รายงานการตรวจสอบปริมาณน้ำไหลล้นจากบ่อลวก และอุณหภูมิน้ำบ่อลวก`, formNo:'FR-QRM-01-004', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+  ],
+  evisceration: [
+    {no:'27', name:`แบบฟอร์มรายงานสรุปการส่งขาซี เข้า OH`, formNo:'FR-RM-01-083', fmt:'กระดาษ', erp:'มี', mb:'ใช้', qdoc:''},
+    {no:'28', name:`รายงานรอบการส่งกึ๋นล้างลอกให้ OH`, formNo:'FR-RM-01-075', fmt:'กระดาษ', erp:'มี', mb:'ใช้', qdoc:''},
+    {no:'29', name:`รายงานสินค้าตก-เกิน plant ประจำวันห้องล้วง`, formNo:'FR-RM-01-141', fmt:'กระดาษ', erp:'มี', mb:'ใช้', qdoc:''},
+    {no:'30', name:`สมุดบันทึกข้อมูลการรับกึ๋นจากห้องล้วงของแผนก OH`, formNo:'FR-RM-01-075', fmt:'กระดาษ', erp:'มี', mb:'ใช้', qdoc:''},
+    {no:'31', name:`การตรวจซากไก่ประจำวัน`, formNo:'FR-QRM-01-021', fmt:'Excel', erp:'ไม่มี', mb:'ใช้', qdoc:''},
+    {no:'32', name:`รายงานการตรวจประสิทธิภาพเครื่อง Cropping`, formNo:'FR-QRM-01-021', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'33', name:`รายงาน CCP 1`, formNo:'FR-QRM-01-030', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+  ],
+  chiller: [
+    {no:'34', name:`บันทึกการจัดแยก Lot`, formNo:'FR-CUT-01-069', fmt:'google sheet', erp:'มี', mb:'', qdoc:''},
+    {no:'35', name:`รายงานการตรวจสอบอุณหภูมิซากไก่`, formNo:'FR-QPT-01-027', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'36', name:`บันทึึกยอดการผลิตไก่ C / ไก่ไหว้เจ้า`, formNo:'FR-CUT-01-085', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'37', name:`รายงานการตรวจสอบอุณหภูมิกึ๋น`, formNo:'FR-QPT-01-125', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'38', name:`รายงานการตรวจสอบอุณหภูมิ China Product (Critical Limit อุณหภูมิปีก 3 ̊C )`, formNo:'FR-QPT-01-132', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'39', name:`รายงานการตรวจสอบอุณหภูมิขาซี`, formNo:'FR-QPT-01-119', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'40', name:`CCP 3. Metal detector performance inspection report (Chilled products)`, formNo:'FR-QPT-01-001', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'41', name:`รายงานการตรวจสอบค่าน้ำ Overflow ขาซี`, formNo:'FR-QPT-01-167', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'42', name:`รายงานการตรวจสอบค่าน้ำ Overflow กึน`, formNo:'FR-QPT-01-168', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'43', name:`รายงานการตรวจวัดอุณหภูมิน้ำต้น-น้ำปลายชิลเลอร์`, formNo:'FR-QPT-01-083', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'44', name:`รายงานการตรวจวัดอุณหภูมิน้ำต้น-น้ำปลายกึ๋น-ขาซี`, formNo:'FR-QPT-01-152', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+  ],
+  cutting: [
+    {no:'45', name:`รายงานการแยก SUB LOT รับส่ง SUB LOT`, formNo:'FR-CUT-01-002', fmt:'กระดาษ', erp:'มี', mb:'', qdoc:''},
+    {no:'46', name:`รายงานบันทึกผลผลิตสันใน`, formNo:'FR-CUT-01-121', fmt:'กระดาษ', erp:'', mb:'', qdoc:''},
+    {no:'47', name:`Report of temperature check`, formNo:'FR-QPT-01-019', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'48', name:`รายงานการตรวจวัดอุณหภูมิห้อง (Checking room temperature report)`, formNo:'FR-QPT-01-039', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+  ],
+  specialcut: [
+    {no:'49', name:`รายงานประสิทธิภาพประจำสายพาน แผนก SC/FL`, formNo:'FR-SC-01-122', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
+    {no:'50', name:`ใบรายงานประสิทธิภาพประจำสายพานแผนก SC-SBB`, formNo:'FR-SC-01-123', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
+    {no:'51', name:`ใบรายงานประสิทธิภาพประจำสายพานแผนก SC-SBL`, formNo:'FR-SC-01-118', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
+    {no:'52', name:`รายงานบันทึกข้อมูล ERP แผนก SC/SFW`, formNo:'FR-SC-01-074', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
+    {no:'53', name:`ผลผลิตแต่ละ Part`, formNo:'', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
+    {no:'54', name:`รายงานการตรวจสอบคุณภาพการผลิตสินค้าปรุงรส`, formNo:'FR-QPT-01-032 Rev.07', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'55', name:`Product Specification check SMP`, formNo:'FR-QPT-01-036 Rev.03', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'56', name:`ตัวอย่าง sensory`, formNo:'FR-QA-01-038 Rev.00', fmt:'กระดาษ', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'57', name:`รายงานการตรวจเช็คสินค้า`, formNo:'FR-QPT-01-105 Rev.01', fmt:'กระดาษ', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'58', name:`รายงานยอดถุงแผนก SC`, formNo:'', fmt:'Excel', erp:'', mb:'', qdoc:''},
+  ],
+  bagprep: [
+    {no:'59', name:`รายงานการพิมพ์ถุงประจำวัน`, formNo:'FR-PKG-02-002', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'60', name:`รายงานการตรวจสอบการพิมพ์ถุง`, formNo:'FR-PAC-02-011', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'61', name:`รายงานการแจ้งเบิกถุงของผลิตกับ PKG`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'62', name:`รายงานการตรวจรับวัตถุดิบกล่อง`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'63', name:`รายงานการรับวัตถุดิบเข้า`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+  ],
+  freezing: [
+    {no:'64', name:`รายงานบันทึกผลผลิตสินค้าเข้าฟรีส`, formNo:'FR-PAC-01-052', fmt:'Excel', erp:'', mb:'', qdoc:''},
+    {no:'65', name:`รายงานบรรจุสินค้า`, formNo:'FR-PAC-03-002', fmt:'Excel', erp:'', mb:'', qdoc:''},
+    {no:'66', name:`CCP 3. : Metal detector performance inspection report (Chilled products)`, formNo:'FR-QPT-01-001 Rev.12', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+  ],
+  boxing: [
+    {no:'67', name:`รายงาน Temperature Check`, formNo:'FR-QPD-01-013', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'68', name:`รายงานการตรวจวัดอุณหภูมิในห้องฟรีส`, formNo:'FR-QPD-01-032', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'69', name:`Packing Check`, formNo:'FR-QPD-01-004', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'70', name:`รายงานการตรวจสอบการพิมพ์กล่อง`, formNo:'FR-PAC-02-018', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'71', name:`รายงานตรวจสอบเครื่องตรวจจับโลหะ (สินค้าแช่แข็ง)`, formNo:'FR-QPD-01-005', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'72', name:`แบบฟอร์มสรุปยอดรวมสินค้า`, formNo:'FR-PAC-03-004', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'73', name:`แบบฟอร์มสรุปยอดรวม`, formNo:'FR-PAC-01-018', fmt:'', erp:'', mb:'', qdoc:''},
+  ],
+  coldstorage: [
+    {no:'74', name:`รายงานรับ-จ่ายสินค้า`, formNo:'FR-CS-01-042', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'75', name:`สมุดรายงานรับเข้าสินค้าแช่เย็น (CHILL)`, formNo:'FR-CS-01-038', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'76', name:`ฟอร์มตู้`, formNo:'FR-CS-01-032', fmt:'', erp:'', mb:'', qdoc:''},
+  ],
+  shipment: [
+    {no:'77', name:`รายงานตรวจสอบการขนถ่ายสินค้าแช่แข็ง`, formNo:'FR-QLD-01-001', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'78', name:`รายงานการขนถ่ายสินค้าแช่เย็น`, formNo:'FR-QLD-01-002', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'79', name:`รายงานตรวจสอบสภาพตู้บรรจุสินค้า`, formNo:'FR-QLD-01-006', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'80', name:`แบบสพส.1 หนังสือรับรองการตรวจเนื้อสัตว์/ผลิตภัณฑ์สัตว์ส่งออกต่างประเทศ  แบบ สพส.2 หนังสือรับรองการตรวจเนื้อสัตว์/ผลิตภัณฑ์สัตว์เพื่อนำไปแปรรูปส่งออกต่างประเทศ  แบบ สพส.4 หนังสือรับรองการตรวจเนื้อสัตว์/ผลิตภัณฑ์สัตว์ ผลแลป MA, Micro, ND/AI,PR, E.coli. Listeria ****ตามข้อกำหนดแต่ละประเทศ`, formNo:'', fmt:'PDF', erp:'', mb:'', qdoc:''},
+    {no:'81', name:`รายงานรับ-จ่ายสินค้า`, formNo:'FR-CS-01-042', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'82', name:`Re. loading`, formNo:'FR-WD-01-039', fmt:'', erp:'', mb:'', qdoc:''},
+  ],
+};
+/* ================= API WRAPPERS (เรียก RPC ใน Supabase — Patch 1) ================= */
+async function apiListProdLots(date){ return await rpc('rpc_list_production_lots', {p_session_token:session.token, p_date:date||null}); }
+async function apiCreateProdLot(dateStr, line){ return await rpc('rpc_create_production_lot', {p_session_token:session.token, p_lot_date:dateStr, p_line:Number(line)}); }
+async function apiListAttachRecords(lotCode, station){ return await rpc('rpc_list_attach_records', {p_session_token:session.token, p_prod_lot_code:lotCode||null, p_station:station||null}); }
+async function apiCreateAttachRecord(lotCode, station, fields){ return await rpc('rpc_create_attach_record', {p_session_token:session.token, p_prod_lot_code:lotCode, p_station:station, p_fields:fields}); }
+async function apiListFgLots(){ return await rpc('rpc_list_fg_lots', {p_session_token:session.token}); }
+async function apiCreateFgLot(dateStr, line, batch, rmSources, fields){ return await rpc('rpc_create_fg_lot', {p_session_token:session.token, p_lot_date:dateStr, p_line:Number(line), p_batch:Number(batch), p_rm_sources:rmSources, p_fields:fields}); }
+async function apiListFinalRecords(station, sourceCode){ return await rpc('rpc_list_final_records', {p_session_token:session.token, p_station:station||null, p_source_code:sourceCode||null}); }
+async function apiCreateFinalRecord(station, sourceCodes, fields){ return await rpc('rpc_create_final_record', {p_session_token:session.token, p_station:station, p_source_codes:sourceCodes, p_fields:fields}); }
+async function apiListFarmMap(){ return await rpc('rpc_list_farm_map', {p_session_token:session.token}); }
+async function apiUpsertFarmMap(dateStr, line, farm, house, feed, breeder, hatch){ return await rpc('rpc_upsert_farm_map', {p_session_token:session.token, p_map_date:dateStr, p_line:Number(line), p_farm_name:farm, p_house_name:house, p_feed_lot:feed||null, p_breeder_flock:breeder||null, p_hatchery_batch:hatch||null}); }
+async function apiListDocEvidence(recordType, recordId){ return await rpc('rpc_list_doc_evidence', {p_session_token:session.token, p_record_type:recordType, p_record_id:recordId}); }
+async function apiUpsertDocEvidence(recordType, recordId, station, docNo, link){ return await rpc('rpc_upsert_doc_evidence', {p_session_token:session.token, p_record_type:recordType, p_record_id:recordId, p_station:station, p_doc_no:docNo, p_link:link, p_storage_path:null, p_file_name:null}); }
+async function apiListEmployees(){ return await rpc('rpc_list_employees', {p_session_token:session.token}); }
+async function apiCreateEmployee(code,name,role,pin){ return await rpc('rpc_create_employee', {p_session_token:session.token, p_employee_code:code, p_full_name:name, p_role:role, p_pin:pin}); }
+async function apiSetEmployeeActive(id,active){ return await rpc('rpc_set_employee_active', {p_session_token:session.token, p_employee_id:id, p_active:active}); }
+async function apiGetAuditLog(limit,code,action){ return await rpc('rpc_get_audit_log', {p_session_token:session.token, p_limit:limit||300, p_employee_code:code||null, p_action:action||null}); }
+
+/* ================= เอกสาร Masterlist ต่อ Record — ผูกกับ Supabase doc_evidence ================= */
+function isSheetLike(fmt){ const f=(fmt||'').toLowerCase(); return f.includes('google') || f.includes('excel') || f.includes('ecertify'); }
+function docMetaLine(d){
+  let parts=[];
+  if(d.formNo) parts.push(d.formNo);
+  parts.push(d.fmt||'ยังไม่ระบุรูปแบบ');
+  if(d.erp==='มี') parts.push('<span class="badge badge-pass">ERP</span>');
+  if(d.mb==='ใช้') parts.push('<span class="badge badge-ccp">Mass Balance</span>');
+  return parts.join(' · ');
+}
+// ดึงหลักฐานเอกสารทั้งหมดของ record หนึ่งตัว คืนเป็น map: docNo -> evidence row
+async function fetchEvidenceMap(recordType, recordId){
+  try{
+    const rows = await apiListDocEvidence(recordType, recordId);
+    const m={}; rows.forEach(r=>{ m[r.doc_no]=r; }); return m;
+  }catch(e){ return {}; }
+}
+function docItemHtml(stationKey, recordType, recordId, d, evidence){
+  const link = evidence ? (evidence.link||'') : '';
+  const done = !!link;
+  const statusBadge = done ? `<span class="badge badge-pass">แนบแล้ว</span>` : `<span class="badge badge-fail">ยังไม่แนบ</span>`;
+  const placeholder = isSheetLike(d.fmt) ? 'วางลิงก์ Google Sheet / Excel Online ของเอกสารนี้' : 'วางลิงก์ไฟล์ (เช่น แชร์จาก Google Drive) — อัปโหลดตรงเปิดใน Patch 2';
+  const evidenceHtml = canWrite() ? `<div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
+      <input type="text" value="${link}" placeholder="${placeholder}" data-doc-link="${d.no}"
+        style="flex:1;padding:6px 8px;font-size:12px;">
+      <button class="btn btn-ghost btn-sm" style="white-space:nowrap;" onclick="saveDocLink('${recordType}','${recordId}','${stationKey}','${d.no}')">บันทึกลิงก์</button>
+      ${link?`<a href="${link}" target="_blank" class="btn btn-ghost btn-sm" style="white-space:nowrap;">เปิดดู ↗</a>`:''}
+    </div>` :
+    (link ? `<div style="margin-top:6px;"><a href="${link}" target="_blank" class="btn btn-ghost btn-sm">เปิดดูเอกสาร ↗</a></div>` : `<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">ยังไม่มีการแนบเอกสาร</div>`);
+  return `<div class="doc-item" id="docitem-${recordType}-${recordId}-${d.no}">
+    <div style="flex:1;">
+      <span class="doc-name">#${d.no} ${d.name} ${statusBadge}</span>
+      <span class="doc-meta">${docMetaLine(d)}</span>
+      ${evidenceHtml}
+    </div>
+  </div>`;
+}
+async function saveDocLink(recordType, recordId, stationKey, docNo){
+  const input = document.querySelector(`#docitem-${recordType}-${recordId}-${docNo} [data-doc-link="${docNo}"]`);
+  if(!input) return;
+  try{
+    await apiUpsertDocEvidence(recordType, recordId, stationKey, docNo, input.value.trim());
+    const el = document.getElementById(`docitem-${recordType}-${recordId}-${docNo}`);
+    if(el) el.style.outline = '2px solid var(--teal-500)';
+    setTimeout(()=>{ if(el) el.style.outline=''; }, 700);
+    const summary = document.getElementById(`docsum-${recordType}-${recordId}`);
+    if(summary) refreshDocSummary(stationKey, recordType, recordId);
+  }catch(e){ alert('บันทึกลิงก์ไม่สำเร็จ'); }
+}
+async function refreshDocSummary(stationKey, recordType, recordId){
+  const docs = STATION_DOCS[stationKey]||[];
+  const evMap = await fetchEvidenceMap(recordType, recordId);
+  const done = docs.filter(d=>evMap[d.no] && evMap[d.no].link).length;
+  const el = document.getElementById(`docsum-${recordType}-${recordId}`);
+  if(el) el.textContent = `เอกสาร Masterlist (${done}/${docs.length} แนบแล้ว)`;
+}
+async function docDetailsHtml(stationKey, recordType, recordId){
+  const docs = STATION_DOCS[stationKey]||[];
+  if(docs.length===0) return `<div class="empty-state" style="padding:14px;">ไม่มีรายการเอกสารของ Station นี้ใน Masterlist</div>`;
+  const evMap = await fetchEvidenceMap(recordType, recordId);
+  const done = docs.filter(d=>evMap[d.no] && evMap[d.no].link).length;
+  const items = docs.map(d=>docItemHtml(stationKey, recordType, recordId, d, evMap[d.no])).join('');
+  return `<details class="docbox">
+    <summary id="docsum-${recordType}-${recordId}">เอกสาร Masterlist (${done}/${docs.length} แนบแล้ว)</summary>
+    <div class="doclist">${items}</div>
+  </details>`;
+}
+
+/* ================= NAV ================= */
+let currentPage='dashboard';
+function renderSidebar(){
+  let h='';
+  h+=navGroup('ภาพรวม', [{key:'dashboard',name:'แดชบอร์ด',dot:'util'},{key:'trace',name:'Trace Query',dot:'util'}]);
+  h+=navGroup('QC Supervisor', [{key:'dailystatus',name:'สถานะความครบถ้วนรายวัน',dot:'ccp'}]);
+  h+=navGroup('Auditor', [{key:'auditorview',name:'มุมมอง Auditor (Read-only)',dot:'util'}]);
+  h+=navGroup('Production Lot (Lot DLD)', [{key:'prodlot',name:'สร้าง / จัดการ Lot DLD',dot:'util'}]);
+  h+=navGroup('IVQF', [{key:'ivqffg',name:'สร้าง LOT FG (IVQF)',dot:'fg'}]);
+  h+=navGroup('บรรจุ / จัดเก็บ / จัดส่ง', FINAL_STATIONS.map(s=>({key:s.key,name:s.name,dot:s.ccpNote?'ccp':''})));
+  h+=navGroup('อ้างอิง', [{key:'farmlookup',name:'ตาราง วันที่+ไลน์ → ฟาร์ม',dot:'util'},{key:'farm',name:'ฟาร์มเลี้ยงไก่ (เฟส 2)',dot:'phase2'}]);
+  if(isAdmin()){
+    h+=navGroup('Admin', [{key:'employees',name:'จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'Audit Log',dot:'admin'}]);
+  }
+  document.getElementById('navContainer').innerHTML=h;
+}
+function navGroup(label, items){
+  let h=`<div class="nav-group-label">${label}</div>`;
+  items.forEach(it=>{ h+=`<div class="nav-item ${currentPage===it.key?'active':''}" onclick="navigateTo('${it.key}')"><span class="nav-dot ${it.dot||''}"></span>${it.name}</div>`; });
+  return h;
+}
+function navigateTo(key){
+  if(key==='employees' || key==='auditlog'){
+    if(!isAdmin()){ alert('เมนูนี้สำหรับ Admin เท่านั้น'); return; }
+  }
+  currentPage=key; renderSidebar();
+  if(key==='dashboard') renderDashboard();
+  else if(key==='trace') renderTrace();
+  else if(key==='dailystatus') renderDailyStatusPage();
+  else if(key==='auditorview') renderAuditorView();
+  else if(key==='prodlot') renderProdLotPage();
+  else if(key==='ivqffg') renderFGPage();
+  else if(key==='farmlookup') renderFarmLookupPage();
+  else if(key==='farm') renderPhase2();
+  else if(key==='employees') renderEmployeesPage();
+  else if(key==='auditlog') renderAuditLogPage();
+  else if(FINAL_MAP[key]) renderFinalStationPage(key);
+}
+function render(){ navigateTo(currentPage); }
+
+/* ================= DASHBOARD ================= */
+async function renderDashboard(){
+  setLoading();
+  let prod, recs, fg, fin;
+  try{
+    [prod, recs, fg, fin] = await Promise.all([apiListProdLots(), apiListAttachRecords(), apiListFgLots(), apiListFinalRecords()]);
+  }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ Supabase'); return; }
+
+  let cards='';
+  cards+=`<div class="stat-card" onclick="navigateTo('prodlot')"><div class="num">${prod.length}</div><div class="lbl">Production Lot (Lot DLD)</div><span class="tag" style="background:var(--teal-100);color:var(--teal-700);">ต้นทางทุก Station</span></div>`;
+  ATTACH_STATIONS.forEach(s=>{
+    const c=recs.filter(r=>r.station===s.key).length;
+    const tagStyle = s.ccpNote ? 'background:var(--amber-100);color:var(--amber-700);' : 'background:var(--teal-100);color:var(--teal-700);';
+    cards+=`<div class="stat-card" onclick="navigateTo('trace')"><div class="num">${c}</div><div class="lbl">${s.name}</div><span class="tag" style="${tagStyle}">${s.ccpNote||s.dept}</span></div>`;
+  });
+  cards+=`<div class="stat-card" onclick="navigateTo('ivqffg')"><div class="num">${fg.length}</div><div class="lbl">LOT FG (IVQF)</div><span class="tag" style="background:var(--purple-100);color:var(--purple-700);">IVQF</span></div>`;
+  FINAL_STATIONS.forEach(s=>{
+    const c=fin.filter(r=>r.station===s.key).length;
+    const tagStyle = s.ccpNote ? 'background:var(--amber-100);color:var(--amber-700);' : 'background:var(--teal-100);color:var(--teal-700);';
+    cards+=`<div class="stat-card" onclick="navigateTo('${s.key}')"><div class="num">${c}</div><div class="lbl">${s.name}</div><span class="tag" style="${tagStyle}">${s.ccpNote||s.dept}</span></div>`;
+  });
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">ภาพรวมระบบ · เชื่อมต่อ Supabase</div>
+    <div class="page-title">แดชบอร์ด</div>
+    <div class="page-desc">Production Lot (Lot DLD) คือรหัสหลักที่ใช้ร่วมกันตั้งแต่รับไก่จนถึง Freezing สินค้าปกติ ส่วน LOT FG ใช้เฉพาะสาย IVQF จุดสีเหลือง = Station ที่มี CCP</div>
+    <div class="grid-cards">${cards}</div>
+  `;
+}
+function renderPhase2(){
+  const docs = STATION_DOCS.farm || [];
+  const rows = docs.map(d=>`<tr><td>#${d.no}</td><td>${d.name}</td><td>${d.formNo||'-'}</td><td>${d.fmt||'-'}</td></tr>`).join('');
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">FARM</div><div class="page-title">ฟาร์มเลี้ยงไก่</div>
+    <div class="phase2-banner">Station นี้อยู่ในแผนพัฒนาเฟส 2 — ยังไม่เปิดให้บันทึกข้อมูล/เอกสารจริง ปัจจุบันใช้ "ตาราง วันที่+ไลน์ → ฟาร์ม" เป็นตัวเชื่อมชั่วคราวแทน</div>
+    <div class="card">
+      <div class="card-title">เอกสารตาม Masterlist ของ Station นี้ (${docs.length} รายการ — อ้างอิงเท่านั้น)</div>
+      <table><thead><tr><th>No.</th><th>ชื่อเอกสาร</th><th>Form No.</th><th>รูปแบบปัจจุบัน</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+}
+
+/* ================= Production Lot (Lot DLD) ================= */
+async function renderProdLotPage(){
+  setLoading();
+  let prod, farmMap;
+  try{ [prod, farmMap] = await Promise.all([apiListProdLots(), apiListFarmMap()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  prod = prod.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+
+  const rows = prod.map(p=>{
+    const farm = farmMap.find(f=>f.map_date===p.lot_date && String(f.line)===String(p.line));
+    return `<tr>
+      <td><span class="lotpill">${p.code}<span style="opacity:.7">${p.simple_code}</span></span></td>
+      <td>${p.lot_date}</td><td>ไลน์ ${p.line}</td>
+      <td>${farm?`${farm.farm_name} / ${farm.house_name||'-'}`:'<span style="color:var(--ink-soft)">ยังไม่มีข้อมูล — ไปที่ตาราง วันที่+ไลน์ → ฟาร์ม</span>'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="navigateAndTrace('${p.code}')">Trace</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Production Lot ในระบบ</div></td></tr>`;
+
+  const createFormHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">สร้าง Production Lot ใหม่</div>
+      <div class="form-grid">
+        <div class="field"><label>วันที่ผลิต</label><input type="date" id="plDate" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>ไลน์การผลิต / กะทำงาน</label>
+          <select id="plLine"><option value="1">ไลน์ 1</option><option value="2">ไลน์ 2</option><option value="3">ไลน์ 3</option><option value="4">ไลน์ 4</option></select>
+        </div>
+      </div>
+      <div id="plPreview" style="margin:10px 0 14px;font-size:13px;color:var(--ink-soft);"></div>
+      <button class="btn" onclick="createProdLot()">สร้าง Lot DLD</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณ (${ROLE_LABEL[session.role]}) ดูข้อมูลได้อย่างเดียว ไม่สามารถสร้าง Lot ใหม่</div>`;
+
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">Production Lot</div>
+    <div class="page-title">สร้าง / จัดการ Lot DLD</div>
+    <div class="page-desc">Lot DLD สร้างจาก <b>พ.ศ. 4 หลัก + วันจูเลียน 3 หลัก + ไลน์การผลิต/กะ 2 หลัก</b> (เช่น 2569227 01) พร้อม Lot อ้างอิงเอกสาร/ใบส่งของแบบ YYMMDD คู่กันเสมอ</div>
+    ${createFormHtml}
+    <div class="card">
+      <div class="card-title">Production Lot ทั้งหมด (${prod.length})</div>
+      <table><thead><tr><th>Lot DLD / Lot เอกสาร</th><th>วันที่</th><th>ไลน์</th><th>ฟาร์มต้นทาง (จากตารางอ้างอิง)</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  `;
+  if(canWrite()){
+    updatePlPreview();
+    document.getElementById('plDate').addEventListener('input', updatePlPreview);
+    document.getElementById('plLine').addEventListener('change', updatePlPreview);
+  }
+}
+function updatePlPreview(){
+  const d=document.getElementById('plDate').value, l=document.getElementById('plLine').value;
+  if(!d) return;
+  document.getElementById('plPreview').innerHTML = `จะได้ Lot DLD: <b>${genProdLotCode(d,l)}</b> &nbsp;|&nbsp; Lot เอกสาร (YYMMDD): <b>${genSimpleLot(d,l)}</b>`;
+}
+async function createProdLot(){
+  const d=document.getElementById('plDate').value, l=document.getElementById('plLine').value;
+  if(!d){ alert('กรุณาระบุวันที่'); return; }
+  try{ await apiCreateProdLot(d, l); renderProdLotPage(); }
+  catch(e){ alert('สร้างไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= 7-Station Accordion ผูกกับ Lot เฉพาะ (แสดงใต้ Trace Query) ================= */
+function stationFieldsFormHtml(cfg, uid){
+  return (cfg.fields||[]).map(f=>{
+    if(f.type==='select') return `<div class="field ${f.ccp?'ccp-field':''}"><label>${f.label}${f.ccp?` <span class="badge badge-ccp">${f.ccp}</span>`:''}</label><select data-field="${f.id}" id="fld_${uid}_${f.id}">${f.options.map(o=>`<option>${o}</option>`).join('')}</select></div>`;
+    return `<div class="field ${f.ccp?'ccp-field':''}"><label>${f.label}${f.ccp?` <span class="badge badge-ccp">${f.ccp}</span>`:''}</label><input type="${f.type}" data-field="${f.id}" id="fld_${uid}_${f.id}" placeholder="${f.label}"></div>`;
+  }).join('');
+}
+async function stationAccordionHtml(stationKey, lotCode){
+  const cfg=ATTACH_MAP[stationKey];
+  let recs=[];
+  try{ recs = await apiListAttachRecords(lotCode, stationKey); }catch(e){}
+  const existingParts = await Promise.all(recs.map(async r=>{
+    const kv=(cfg.fields||[]).map(f=>{
+      const v=(r.fields||{})[f.id]||'-';
+      if(f.ccp){ const cls=v==='ผ่าน'?'badge-pass':(v==='ไม่ผ่าน'?'badge-fail':'badge-ccp'); return `<span class="badge ${cls}">${f.ccp}: ${v}</span>`; }
+      return `<span class="kv"><b>${f.label}:</b> ${v}</span>`;
+    }).join(' ');
+    const docHtml = await docDetailsHtml(stationKey, 'attach', r.id);
+    return `<div class="existing-rec">
+      <div class="st">บันทึกเมื่อ ${new Date(r.created_at).toLocaleString('th-TH')}</div>
+      <div>${kv}</div>
+      <div style="margin-top:8px;">${docHtml}</div>
+    </div>`;
+  }));
+  const existingHtml = existingParts.join('') || `<div class="empty-state" style="padding:10px 4px;">ยังไม่มีข้อมูลของ Lot นี้ใน Station นี้</div>`;
+  const uid = stationKey + '_' + lotCode.replace(/\s+/g,'');
+
+  const formHtml = canWrite() ? `
+      <div class="inline-form" data-station="${stationKey}" style="margin-top:6px;border-top:1px dashed var(--line);padding-top:12px;">
+        <div class="card-title" style="font-size:13px;">+ เพิ่มข้อมูลใหม่ที่ Station นี้ สำหรับ Lot นี้</div>
+        <div class="form-grid">${stationFieldsFormHtml(cfg, uid)}</div>
+        <button class="btn btn-sm" style="margin-top:10px;" onclick="createAttachRecordInline('${stationKey}','${lotCode}','${uid}')">บันทึกข้อมูล</button>
+      </div>` : '';
+
+  return `<details class="station-acc">
+    <summary>${cfg.name}${cfg.ccpNote?` <span class="badge badge-ccp">${cfg.ccpNote}</span>`:''}<span class="acc-count">${recs.length} รายการ</span></summary>
+    <div class="acc-body">
+      ${existingHtml}
+      ${formHtml}
+    </div>
+  </details>`;
+}
+async function lotStationsAccordionHtml(lotCode){
+  const parts = await Promise.all(ATTACH_STATIONS.map(s=>stationAccordionHtml(s.key, lotCode)));
+  return parts.join('');
+}
+async function createAttachRecordInline(stationKey, lotCode, uid){
+  const cfg=ATTACH_MAP[stationKey];
+  const fields={};
+  (cfg.fields||[]).forEach(f=>{
+    const el=document.getElementById(`fld_${uid}_${f.id}`);
+    if(el) fields[f.id]=el.value;
+  });
+  try{
+    await apiCreateAttachRecord(lotCode, stationKey, fields);
+    runTrace();
+  }catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= IVQF LOT FG ================= */
+async function renderFGPage(){
+  setLoading();
+  let prod, fgs;
+  try{ [prod, fgs] = await Promise.all([apiListProdLots(), apiListFgLots()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  prod = prod.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  fgs = fgs.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+
+  const srcHtml = prod.length ? prod.map(p=>`<label class="source-item"><input type="checkbox" class="rmChk" value="${p.code}"><span class="lotcode">${p.code}</span> — ${p.lot_date} ไลน์ ${p.line}</label>`).join('')
+    : `<div class="empty">ยังไม่มี Production Lot (RM) ในระบบ</div>`;
+  const rows=fgs.map(fg=>`<tr>
+    <td class="lotcode fg" onclick="navigateAndTrace('${fg.code}')">${fg.code}</td>
+    <td>${fg.lot_date} / ไลน์ ${fg.line} / Batch ${pad2(fg.batch)}</td>
+    <td>${(fg.rm_sources||[]).map(s=>`<span class="src-tag" onclick="navigateAndTrace('${s}')">${s}</span>`).join('')}</td>
+    <td>${(fg.fields||{}).productType||'-'}</td>
+    <td>${(fg.fields||{}).allergen||'-'}</td>
+  </tr>`).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี LOT FG</div></td></tr>`;
+
+  const createFormHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">สร้าง LOT FG ใหม่</div>
+      <div class="field full" style="margin-bottom:14px;"><label>เลือก LOT RM ต้นทาง (เลือกได้หลายรายการ)</label><div class="source-box">${srcHtml}</div></div>
+      <div class="form-grid">
+        <div class="field"><label>วันที่แพ็ค (FG)</label><input type="date" id="fgDate" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>ไลน์การผลิต</label><select id="fgLine"><option value="1">ไลน์ 1</option><option value="2">ไลน์ 2</option><option value="3">ไลน์ 3</option><option value="4">ไลน์ 4</option></select></div>
+        <div class="field"><label>เลข Batch</label><input type="number" id="fgBatch" value="1" min="1"></div>
+        <div class="field"><label>ประเภทสินค้า</label><select id="fgProductType"><option>สดแช่แข็ง IVQF</option><option>Marinated แช่แข็ง IVQF</option></select></div>
+        <div class="field"><label>Lot วัตถุดิบปรุงรส</label><input type="text" id="fgIngredientLot" placeholder="เช่น ING-0077"></div>
+        <div class="field"><label>สารก่อภูมิแพ้ (ถ้ามี)</label><input type="text" id="fgAllergen" placeholder="เช่น ถั่วเหลือง, กลูเตน"></div>
+        <div class="field ccp-field"><label>CCP — อุณหภูมิ IVQF (°C)</label><input type="number" id="fgTemp" placeholder="เช่น -18.0"></div>
+      </div>
+      <div id="fgPreview" style="margin:10px 0 14px;font-size:13px;color:var(--ink-soft);"></div>
+      <button class="btn" onclick="createFGLot()">สร้าง LOT FG</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณ (${ROLE_LABEL[session.role]}) ดูข้อมูลได้อย่างเดียว ไม่สามารถสร้าง LOT FG</div>`;
+
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">IVQF</div>
+    <div class="page-title">สร้าง LOT FG (IVQF)</div>
+    <div class="page-desc">LOT FG มีรูปแบบ พ.ศ.+วันจูเลียน + ไลน์(2หลัก)+Batch(2หลัก) เช่น 2569078 0101 — วันที่ของ LOT FG (วันแพ็ค) กรอกแยกอิสระจาก LOT RM แล้วเลือก LOT RM (Production Lot) ที่ใช้เป็นวัตถุดิบ</div>
+    ${createFormHtml}
+    <div class="card">
+      <div class="card-title">LOT FG ทั้งหมด (${fgs.length})</div>
+      <table><thead><tr><th>LOT FG</th><th>วันที่/ไลน์/Batch</th><th>LOT RM ต้นทาง</th><th>ประเภทสินค้า</th><th>Allergen</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  `;
+  if(canWrite()){
+    const upd=()=>{ const d=document.getElementById('fgDate').value,l=document.getElementById('fgLine').value,b=document.getElementById('fgBatch').value||1;
+      document.getElementById('fgPreview').innerHTML = d? `จะได้ LOT FG: <b>${genFGCode(d,l,b)}</b>` : ''; };
+    document.getElementById('fgDate').addEventListener('input', upd);
+    document.getElementById('fgLine').addEventListener('change', upd);
+    document.getElementById('fgBatch').addEventListener('input', upd);
+    upd();
+  }
+}
+async function createFGLot(){
+  const rm=Array.from(document.querySelectorAll('.rmChk:checked')).map(el=>el.value);
+  if(rm.length===0){ alert('กรุณาเลือก LOT RM ต้นทางอย่างน้อย 1 รายการ'); return; }
+  const d=document.getElementById('fgDate').value, l=document.getElementById('fgLine').value, b=document.getElementById('fgBatch').value||1;
+  if(!d){ alert('กรุณาระบุวันที่แพ็ค'); return; }
+  const fields={
+    productType:document.getElementById('fgProductType').value,
+    ingredientLot:document.getElementById('fgIngredientLot').value,
+    allergen:document.getElementById('fgAllergen').value,
+    ivqfTempC:document.getElementById('fgTemp').value,
+  };
+  try{ await apiCreateFgLot(d,l,b,rm,fields); renderFGPage(); }
+  catch(e){ alert('สร้างไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= FINAL STATIONS (Boxing / Cold Storage / Shipment) ================= */
+async function renderFinalStationPage(key){
+  setLoading();
+  const cfg=FINAL_MAP[key];
+  let prod, fgs, recs;
+  try{ [prod, fgs, recs] = await Promise.all([apiListProdLots(), apiListFgLots(), apiListFinalRecords(key)]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  prod = prod.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  fgs = fgs.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  recs = recs.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+
+  const srcHtml = (prod.length+fgs.length===0) ? `<div class="empty">ยังไม่มี Lot ในระบบ</div>` :
+    prod.map(p=>`<label class="source-item"><input type="checkbox" class="finChk" value="${p.code}"><span class="lotcode">${p.code}</span> <span style="color:var(--ink-soft)">(Lot DLD · เอกสารฟอร์มตู้: ${p.simple_code})</span></label>`).join('') +
+    fgs.map(f=>`<label class="source-item"><input type="checkbox" class="finChk" value="${f.code}"><span class="lotcode fg">${f.code}</span> <span style="color:var(--ink-soft)">(LOT FG)</span></label>`).join('');
+
+  const fieldsHtml=(cfg.fields||[]).map(f=>{
+    if(f.type==='select') return `<div class="field ${f.ccp?'ccp-field':''}"><label>${f.label}${f.ccp?` <span class="badge badge-ccp">${f.ccp}</span>`:''}</label><select data-field="${f.id}">${f.options.map(o=>`<option>${o}</option>`).join('')}</select></div>`;
+    return `<div class="field ${f.ccp?'ccp-field':''}"><label>${f.label}${f.ccp?` <span class="badge badge-ccp">${f.ccp}</span>`:''}</label><input type="${f.type}" data-field="${f.id}" placeholder="${f.label}"></div>`;
+  }).join('');
+  const headerFields=(cfg.fields||[]).map(f=>`<th>${f.ccp?f.ccp+' — ':''}${f.label}</th>`).join('');
+
+  const rowParts = await Promise.all(recs.map(async r=>{
+    const cells=(cfg.fields||[]).map(f=>{ const v=(r.fields||{})[f.id]||'-'; if(f.ccp){const cls=v==='ผ่าน'?'badge-pass':(v==='ไม่ผ่าน'?'badge-fail':'badge-ccp'); return `<td><span class="badge ${cls}">${f.ccp}: ${v}</span></td>`;} return `<td>${v}</td>`; }).join('');
+    const srcTags=(r.source_codes||[]).map(c=>{
+      const isFg = fgs.find(f=>f.code===c);
+      const pl = prod.find(p=>p.code===c);
+      return `<span class="src-tag ${isFg?'fg':''}" onclick="navigateAndTrace('${c}')">${c}${pl?` / ${pl.simple_code}`:''}</span>`;
+    }).join('');
+    const docHtml = await docDetailsHtml(key, 'final', r.id);
+    return `<tr><td>${srcTags}</td><td>${new Date(r.created_at).toLocaleString('th-TH')}</td>${cells}<td>${docHtml}</td></tr>`;
+  }));
+  const rows = rowParts.join('') || `<tr><td colspan="${(cfg.fields||[]).length+3}"><div class="empty-state">ยังไม่มีข้อมูลใน Station นี้</div></td></tr>`;
+
+  const createFormHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกข้อมูลใหม่</div>
+      <div class="field full" style="margin-bottom:14px;"><label>เลือก Lot ต้นทาง</label><div class="source-box">${srcHtml}</div></div>
+      <div class="form-grid">${fieldsHtml}</div>
+      <div style="margin-top:16px;"><button class="btn" onclick="createFinalRecord('${key}')">บันทึกข้อมูล</button></div>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณ (${ROLE_LABEL[session.role]}) ดูข้อมูลได้อย่างเดียว ไม่สามารถบันทึกที่ Station นี้</div>`;
+
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">${cfg.dept}${cfg.ccpNote?` · <span style="color:var(--amber-700)">${cfg.ccpNote}</span>`:''}</div>
+    <div class="page-title">${cfg.name}</div>
+    <div class="page-desc">เลือก Lot ต้นทาง (Lot DLD ปกติ หรือ LOT FG ของ IVQF) ที่เกี่ยวข้อง — เลือกได้หลายรายการ</div>
+    ${createFormHtml}
+    <div class="card">
+      <div class="card-title">ข้อมูลที่บันทึกแล้ว (${recs.length})</div>
+      <table><thead><tr><th>Lot ต้นทาง</th><th>วันเวลา</th>${headerFields}<th>เอกสาร Masterlist</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  `;
+}
+async function createFinalRecord(key){
+  const main=document.getElementById('mainContent');
+  const srcCodes=Array.from(main.querySelectorAll('.finChk:checked')).map(el=>el.value);
+  if(srcCodes.length===0){ alert('กรุณาเลือก Lot ต้นทางอย่างน้อย 1 รายการ'); return; }
+  const fields={}; main.querySelectorAll('[data-field]').forEach(el=>fields[el.dataset.field]=el.value);
+  try{ await apiCreateFinalRecord(key, srcCodes, fields); renderFinalStationPage(key); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= FARM LOOKUP ================= */
+async function renderFarmLookupPage(){
+  setLoading();
+  let farmMap;
+  try{ farmMap = await apiListFarmMap(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  farmMap = farmMap.slice().sort((a,b)=> (b.map_date||'').localeCompare(a.map_date||''));
+
+  const rows=farmMap.map(f=>`<tr><td>${f.map_date}</td><td>ไลน์ ${f.line}</td><td>${f.farm_name}</td><td>${f.house_name||'-'}</td><td>${f.feed_lot||'-'}</td><td>${f.breeder_flock||'-'}</td><td>${f.hatchery_batch||'-'}</td></tr>`).join('')
+    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const createFormHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">เพิ่มข้อมูลอ้างอิง</div>
+      <div class="form-grid">
+        <div class="field"><label>วันที่</label><input type="date" id="fmDate" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>ไลน์</label><select id="fmLine"><option value="1">ไลน์ 1</option><option value="2">ไลน์ 2</option><option value="3">ไลน์ 3</option><option value="4">ไลน์ 4</option></select></div>
+        <div class="field"><label>ชื่อฟาร์ม</label><input type="text" id="fmFarm" placeholder="เช่น ฟาร์มบ้านนา"></div>
+        <div class="field"><label>เล้า / โรงเรือน</label><input type="text" id="fmHouse" placeholder="เช่น เล้า 4"></div>
+        <div class="field"><label>Lot อาหารสัตว์ (เฟส 2)</label><input type="text" id="fmFeed" placeholder="เช่น FEED-2569-0142"></div>
+        <div class="field"><label>ฝูงพ่อแม่พันธุ์ (เฟส 2)</label><input type="text" id="fmBreeder" placeholder="เช่น BR-FLOCK-0093"></div>
+        <div class="field"><label>ล็อตโรงฟักไข่ (เฟส 2)</label><input type="text" id="fmHatch" placeholder="เช่น HATCH-2569-0311"></div>
+      </div>
+      <div style="margin-top:16px;"><button class="btn" onclick="addFarmMap()">บันทึก</button></div>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณ (${ROLE_LABEL[session.role]}) ดูข้อมูลได้อย่างเดียว ไม่สามารถเพิ่มข้อมูลอ้างอิง</div>`;
+
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">ตารางอ้างอิง</div>
+    <div class="page-title">วันที่ + ไลน์ → ฟาร์ม → ต้นน้ำ</div>
+    <div class="page-desc">Lot DLD ไม่มีชื่อฟาร์มฝังอยู่ในเลข ต้องใช้ "วันที่ + ไลน์" ไปเทียบกับตารางนี้เพื่อขอเอกสารฟาร์ม และใช้ต่อเนื่องไปหาล็อตอาหารสัตว์ ฝูงพ่อแม่พันธุ์ และโรงฟักไข่ (ข้อมูลเฟส 2)</div>
+    ${createFormHtml}
+    <div class="card"><div class="card-title">ตารางอ้างอิงทั้งหมด</div>
+      <table><thead><tr><th>วันที่</th><th>ไลน์</th><th>ฟาร์ม</th><th>เล้า/โรงเรือน</th><th>Lot อาหารสัตว์</th><th>ฝูงพ่อแม่พันธุ์</th><th>ล็อตโรงฟัก</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+}
+async function addFarmMap(){
+  const date=document.getElementById('fmDate').value, line=document.getElementById('fmLine').value;
+  const farmName=document.getElementById('fmFarm').value, houseName=document.getElementById('fmHouse').value;
+  const feedLot=document.getElementById('fmFeed').value, breederFlock=document.getElementById('fmBreeder').value, hatcheryBatch=document.getElementById('fmHatch').value;
+  if(!date||!farmName){ alert('กรุณากรอกวันที่และชื่อฟาร์ม'); return; }
+  try{ await apiUpsertFarmMap(date, line, farmName, houseName, feedLot, breederFlock, hatcheryBatch); renderFarmLookupPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= TRACE QUERY ================= */
+function navigateAndTrace(code){ navigateTo('trace'); setTimeout(()=>{ document.getElementById('traceInput').value=code; runTrace(); }, 0); }
+async function renderTrace(){
+  setLoading();
+  let prod, fgs;
+  try{ [prod, fgs] = await Promise.all([apiListProdLots(), apiListFgLots()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  const options = prod.map(p=>`<option value="${p.code}">`).join('') + prod.map(p=>`<option value="${p.simple_code}">`).join('') + fgs.map(f=>`<option value="${f.code}">`).join('');
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">Genealogy</div>
+    <div class="page-title">Trace Query</div>
+    <div class="page-desc">จุดเริ่ม Trace ที่แนะนำ: เริ่มค้นหาจาก <b>ลูกค้า/เลขที่ใบส่งของ</b> ก่อน แล้วไล่ย้อนกลับผ่านทุกกระบวนการจนถึงฟาร์ม อาหารสัตว์ ฝูงพ่อแม่พันธุ์ และโรงฟักไข่</div>
+
+    <div class="card">
+      <div class="card-title">1) เริ่มจากลูกค้า / ใบส่งของที่ส่งมอบแล้ว</div>
+      <div class="trace-search">
+        <input type="text" id="shipSearch" placeholder="พิมพ์ชื่อลูกค้า หรือเลขที่ใบส่งของ">
+        <button class="btn" onclick="searchShipments()">ค้นหาใบส่งของ</button>
+      </div>
+      <div id="shipResult"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2) หรือค้นหาโดยตรงด้วย Lot DLD / LOT FG</div>
+      <div class="trace-search">
+        <input type="text" id="traceInput" list="lotList" placeholder="เช่น 2569227 01 หรือ 2569078 0101">
+        <datalist id="lotList">${options}</datalist>
+        <button class="btn" onclick="runTrace()">ค้นหา</button>
+      </div>
+    </div>
+    <div id="traceResult"></div>`;
+  searchShipments();
+}
+async function searchShipments(){
+  const q=(document.getElementById('shipSearch').value||'').trim().toLowerCase();
+  let shipments;
+  try{ shipments = await apiListFinalRecords('shipment'); }catch(e){ return; }
+  const matched = q ? shipments.filter(r=> ((r.fields||{}).customer||'').toLowerCase().includes(q) || ((r.fields||{}).doNumber||'').toLowerCase().includes(q)) : shipments;
+  const box=document.getElementById('shipResult');
+  if(matched.length===0){ box.innerHTML=`<div class="empty-state">ไม่พบใบส่งของที่ตรงกับ "${q}"</div>`; return; }
+  let fgs=[]; try{ fgs = await apiListFgLots(); }catch(e){}
+  let prod=[]; try{ prod = await apiListProdLots(); }catch(e){}
+  box.innerHTML = matched.map(r=>`
+    <div class="trace-node" style="margin-top:12px;">
+      <div class="st">ส่งมอบ ${new Date(r.created_at).toLocaleString('th-TH')} · เลขที่ใบส่งของ ${(r.fields||{}).doNumber||'-'}</div>
+      <div class="code">${(r.fields||{}).customer||'ลูกค้าไม่ระบุชื่อ'}</div>
+      <div style="margin-top:6px;">${(r.source_codes||[]).map(c=>{
+        const isFg=fgs.find(f=>f.code===c);
+        const pl=prod.find(p=>p.code===c);
+        const pairLabel = pl ? ` <span style="opacity:.7">(Lot เอกสารฟอร์มตู้: ${pl.simple_code})</span>` : '';
+        return `<div style="margin-top:4px;">
+          <button class="btn btn-sm btn-ghost" onclick="navigateAndTrace('${c}')">ไล่ย้อนกลับจาก ${c} ${isFg?'(LOT FG)':'(Lot DLD)'}</button>${pairLabel}
+        </div>`;
+      }).join('')}</div>
+    </div>`).join('');
+}
+
+function nodeHtmlGeneric(title, sub, badges, isSelf, isFg){
+  return `<div class="trace-node ${isSelf?'self':''} ${isFg?'fg':''}"><div class="st">${sub}</div><div class="code">${title}</div><div style="margin-top:4px;">${badges}</div></div>`;
+}
+function ccpBadgesForAttach(rec){
+  const cfg=ATTACH_MAP[rec.station]; if(!cfg||!cfg.fields) return '';
+  return cfg.fields.filter(f=>f.ccp).map(f=>{ const v=(rec.fields||{})[f.id]; const cls=v==='ผ่าน'?'badge-pass':(v==='ไม่ผ่าน'?'badge-fail':'badge-ccp'); return `<span class="badge ${cls}">${f.ccp}: ${v||'-'}</span>`; }).join('');
+}
+function ccpBadgesForFinal(rec){
+  const cfg=FINAL_MAP[rec.station]; if(!cfg||!cfg.fields) return '';
+  return cfg.fields.filter(f=>f.ccp).map(f=>{ const v=(rec.fields||{})[f.id]; const cls=v==='ผ่าน'?'badge-pass':(v==='ไม่ผ่าน'?'badge-fail':'badge-ccp'); return `<span class="badge ${cls}">${f.ccp}: ${v||'-'}</span>`; }).join('');
+}
+function upstreamNodesFor(prodLot, farmMap){
+  const farm = farmMap.find(f=>f.map_date===prodLot.lot_date && String(f.line)===String(prodLot.line));
+  if(!farm) return `<div class="empty-state">ยังไม่มีข้อมูลฟาร์มในตารางอ้างอิงสำหรับวันที่+ไลน์นี้ — ไปกรอกที่เมนู "ตาราง วันที่+ไลน์ → ฟาร์ม"</div>`;
+  let html = nodeHtmlGeneric(`${farm.farm_name} / ${farm.house_name||'-'}`, `ฟาร์มเลี้ยงไก่ (ต้นทางของ Lot นี้) · ${farm.map_date} ไลน์ ${farm.line}`, '', false, false);
+  if(farm.feed_lot) html += nodeHtmlGeneric(farm.feed_lot, 'Lot อาหารสัตว์ที่ฟาร์มใช้เลี้ยง (เฟส 2)', '', false, false);
+  if(farm.breeder_flock) html += nodeHtmlGeneric(farm.breeder_flock, 'ฝูงพ่อแม่พันธุ์ต้นทางของลูกไก่ (เฟส 2)', '', false, false);
+  if(farm.hatchery_batch) html += nodeHtmlGeneric(farm.hatchery_batch, 'ล็อตโรงฟักไข่ที่ผลิตลูกไก่ (เฟส 2)', '', false, false);
+  return html;
+}
+
+async function runTrace(){
+  const rawCode=document.getElementById('traceInput').value.trim();
+  const resultEl=document.getElementById('traceResult');
+  resultEl.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังไล่ Trace...</div>`;
+
+  let prod, fgs, farmMap;
+  try{ [prod, fgs, farmMap] = await Promise.all([apiListProdLots(), apiListFgLots(), apiListFarmMap()]); }
+  catch(e){ resultEl.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
+
+  let prodLot = prod.find(p=>p.code===rawCode) || prod.find(p=>p.simple_code===rawCode);
+  const fgLot = fgs.find(f=>f.code===rawCode);
+
+  if(!prodLot && !fgLot){
+    resultEl.innerHTML=`<div class="note-banner">ไม่พบ "${rawCode}" ในระบบ (ลองได้ทั้งรูปแบบ Lot DLD เช่น 2569227 01 หรือ Lot เอกสาร YYMMDD เช่น 26081501) — ลองเลือกจากรายการที่แนะนำ</div>`; return;
+  }
+  const code = prodLot ? prodLot.code : rawCode;
+  let noteHtml = '';
+  if(prodLot && rawCode===prodLot.simple_code){
+    noteHtml = `<div class="note-banner">พบจาก Lot เอกสาร (YYMMDD) "${rawCode}" ตรงกับ Lot DLD <b>${prodLot.code}</b> — แสดงผล Trace ของ Lot นี้ด้านล่าง</div>`;
+  }
+
+  let backHtml='', fwdHtml='', selfHtml='', accordionHtml='';
+
+  if(prodLot){
+    backHtml = upstreamNodesFor(prodLot, farmMap);
+    selfHtml = nodeHtmlGeneric(`${prodLot.code}`, `Production Lot (Lot DLD) · Lot เอกสาร: ${prodLot.simple_code} · ${prodLot.lot_date} ไลน์ ${prodLot.line}`, '', true, false);
+
+    let attach=[], finalRecs=[], fgUsing=[];
+    try{
+      [attach, finalRecs] = await Promise.all([apiListAttachRecords(code), apiListFinalRecords(null, code)]);
+      fgUsing = fgs.filter(f=>(f.rm_sources||[]).includes(code));
+    }catch(e){}
+    attach.sort((a,b)=> ATTACH_STATIONS.findIndex(s=>s.key===a.station) - ATTACH_STATIONS.findIndex(s=>s.key===b.station));
+    const fwdAttach = attach.map(r=>nodeHtmlGeneric(ATTACH_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForAttach(r), false, false)).join('');
+    const usedByFg = fgUsing.map(f=>nodeHtmlGeneric(f.code, `ใช้เป็น LOT RM ของ LOT FG · ${f.lot_date} ไลน์ ${f.line} Batch ${pad2(f.batch)}`, '', false, true)).join('');
+    const fin = finalRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('');
+    fwdHtml = (fwdAttach + usedByFg + fin) || `<div class="empty-state">ยังไม่มีข้อมูลถัดไป</div>`;
+
+    accordionHtml = await lotStationsAccordionHtml(prodLot.code);
+  } else if(fgLot){
+    const rmParts = await Promise.all((fgLot.rm_sources||[]).map(async rc=>{
+      const rp = prod.find(p=>p.code===rc);
+      let n = nodeHtmlGeneric(rc, `LOT RM (Production Lot) ${rp?`· ${rp.lot_date} ไลน์ ${rp.line}`:''}`, '', false, false);
+      try{
+        const attach = await apiListAttachRecords(rc);
+        attach.sort((a,b)=> ATTACH_STATIONS.findIndex(s=>s.key===a.station) - ATTACH_STATIONS.findIndex(s=>s.key===b.station));
+        n += attach.map(r=>nodeHtmlGeneric(ATTACH_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForAttach(r), false, false)).join('');
+      }catch(e){}
+      if(rp) n += upstreamNodesFor(rp, farmMap);
+      return n;
+    }));
+    backHtml = rmParts.join('') || `<div class="empty-state">ไม่พบ LOT RM ต้นทาง</div>`;
+    const fgBadges = fgLot.fields && fgLot.fields.ivqfTempC ? `<span class="badge badge-ccp">CCP อุณหภูมิ IVQF: ${fgLot.fields.ivqfTempC}°C</span>` : '';
+    selfHtml = nodeHtmlGeneric(fgLot.code, `LOT FG (IVQF) · ${(fgLot.fields||{}).productType||''} · ${fgLot.lot_date} ไลน์ ${fgLot.line} Batch ${pad2(fgLot.batch)}`, fgBadges, true, true);
+    let finalRecs=[]; try{ finalRecs = await apiListFinalRecords(null, code); }catch(e){}
+    fwdHtml = finalRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('') || `<div class="empty-state">ยังไม่มีข้อมูลถัดไป</div>`;
+  }
+
+  resultEl.innerHTML=`
+    ${noteHtml}
+    <div class="trace-cols">
+      <div class="trace-col"><h4>ย้อนหลัง (Backward)</h4>${backHtml}</div>
+      <div class="trace-col"><h4>Lot ที่ค้นหา</h4>${selfHtml}<h4 style="margin-top:18px;">ไปข้างหน้า (Forward)</h4>${fwdHtml}</div>
+    </div>
+    ${prodLot ? `<div class="card" style="margin-top:22px;">
+      <div class="card-title">ข้อมูลการผลิต 7 Station ของ Lot นี้ (${prodLot.code})</div>
+      <div class="page-desc" style="margin-bottom:14px;">คลิกแต่ละ Station เพื่อดูข้อมูลที่บันทึกไว้ ${canWrite()?'ติ๊กสถานะเอกสาร Masterlist หรือเพิ่มข้อมูลใหม่ได้ทันที':'(บทบาทของคุณดูได้อย่างเดียว)'}</div>
+      ${accordionHtml}
+    </div>` : ''}`;
+}
+
+/* ================= QC Supervisor: สถานะความครบถ้วนรายวัน ================= */
+async function aggregatedDocStatus(stationKey, lotCode, allAttachRecs){
+  const total=(STATION_DOCS[stationKey]||[]).length;
+  const recs=allAttachRecs.filter(r=>r.prod_lot_code===lotCode && r.station===stationKey);
+  if(recs.length===0) return {hasData:false, done:0, total};
+  const evMaps = await Promise.all(recs.map(r=>fetchEvidenceMap('attach', r.id)));
+  const doneSet=new Set();
+  (STATION_DOCS[stationKey]||[]).forEach(d=>{
+    if(evMaps.some(m=>m[d.no] && m[d.no].link)) doneSet.add(d.no);
+  });
+  return {hasData:true, done:doneSet.size, total};
+}
+function statusCellHtml(s){
+  if(!s.hasData) return `<td><span class="badge badge-fail">✗ ไม่มีข้อมูล</span></td>`;
+  if(s.total>0 && s.done<s.total) return `<td><span class="badge badge-ccp">⚠ เอกสาร ${s.done}/${s.total}</span></td>`;
+  return `<td><span class="badge badge-pass">✓ ครบ ${s.total?`(${s.done}/${s.total})`:''}</span></td>`;
+}
+async function renderDailyStatusPage(selectedDate){
+  setLoading();
+  const date = selectedDate || new Date().toISOString().slice(0,10);
+  let lots, allAttachRecs;
+  try{
+    lots = await apiListProdLots(date);
+    allAttachRecs = await apiListAttachRecords();
+  }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+
+  const header = ATTACH_STATIONS.map(s=>`<th>${s.name}${s.ccpNote?` <span style="color:var(--amber-700)">★</span>`:''}</th>`).join('');
+  const rowParts = await Promise.all(lots.map(async p=>{
+    const statuses = await Promise.all(ATTACH_STATIONS.map(s=>aggregatedDocStatus(s.key, p.code, allAttachRecs)));
+    const cells = statuses.map(statusCellHtml).join('');
+    return { row: `<tr><td class="lotcode" onclick="navigateAndTrace('${p.code}')">${p.code}<div class="lotsub">ไลน์ ${p.line} · ${p.simple_code}</div></td>${cells}</tr>`,
+             incomplete: statuses.some(s=>!s.hasData || s.done<s.total) };
+  }));
+  const rows = rowParts.map(r=>r.row).join('') || `<tr><td colspan="${ATTACH_STATIONS.length+1}"><div class="empty-state">ไม่มี Production Lot ในวันที่เลือก</div></td></tr>`;
+  const incompleteCount = rowParts.filter(r=>r.incomplete).length;
+  const summaryHtml = lots.length===0 ? '' :
+    incompleteCount>0
+      ? `<span style="color:var(--red-600);font-weight:600;">⚠ ${incompleteCount} จาก ${lots.length} Lot ยังมี Station ที่ข้อมูล/เอกสารไม่ครบ</span>`
+      : `<span style="color:var(--green-700);font-weight:600;">✓ ทุก Lot (${lots.length}) มีข้อมูลครบทุก Station แล้ว</span>`;
+
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">QC Supervisor</div>
+    <div class="page-title">สถานะความครบถ้วนรายวัน</div>
+    <div class="page-desc">เช็คก่อนปิดกะ — Lot ไหนของวันที่เลือกยังไม่มีข้อมูลหรือเอกสารไม่ครบที่ Station ใดบ้าง ★ = Station ที่มี CCP ควรตรวจก่อนเป็นลำดับแรก</div>
+    <div class="card">
+      <div style="display:flex;gap:16px;align-items:end;flex-wrap:wrap;">
+        <div class="field" style="margin-bottom:0;"><label>เลือกวันที่</label><input type="date" id="dsDate" value="${date}" onchange="renderDailyStatusPage(this.value)"></div>
+        <div style="font-size:13.5px;">${summaryHtml}</div>
+      </div>
+    </div>
+    <div class="card">
+      <table><thead><tr><th>Lot DLD</th>${header}</tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  `;
+}
+
+/* ================= Auditor View (Read-only) ================= */
+async function auditorStats(){
+  const [prod, recs, fin, fg] = await Promise.all([apiListProdLots(), apiListAttachRecords(), apiListFinalRecords(), apiListFgLots()]);
+  let ccpFail=0, ccpTotal=0;
+  recs.forEach(r=>{ const cfg=ATTACH_MAP[r.station]; (cfg.fields||[]).forEach(f=>{ if(f.ccp){ ccpTotal++; if((r.fields||{})[f.id]==='ไม่ผ่าน') ccpFail++; } }); });
+  fin.forEach(r=>{ const cfg=FINAL_MAP[r.station]; (cfg.fields||[]).forEach(f=>{ if(f.ccp){ ccpTotal++; if((r.fields||{})[f.id]==='ไม่ผ่าน') ccpFail++; } }); });
+
+  const allRecs = [...recs.map(r=>({type:'attach', id:r.id, station:r.station})), ...fin.map(r=>({type:'final', id:r.id, station:r.station}))];
+  let totalDocSlots=0, doneDocSlots=0;
+  await Promise.all(allRecs.map(async r=>{
+    const docs = STATION_DOCS[r.station]||[];
+    totalDocSlots += docs.length;
+    const evMap = await fetchEvidenceMap(r.type, r.id);
+    doneDocSlots += docs.filter(d=>evMap[d.no] && evMap[d.no].link).length;
+  }));
+
+  return {
+    totalLots: prod.length,
+    docPct: totalDocSlots? Math.round(doneDocSlots/totalDocSlots*100):0,
+    doneDocSlots, totalDocSlots, ccpFail, ccpTotal,
+    totalFG: fg.length,
+    totalShipments: fin.filter(r=>r.station==='shipment').length,
+  };
+}
+async function renderAuditorView(){
+  setLoading('กำลังคำนวณสถิติภาพรวม...');
+  let s, prod, fgs;
+  try{ [s, prod, fgs] = await Promise.all([auditorStats(), apiListProdLots(), apiListFgLots()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  const options = prod.map(p=>`<option value="${p.code}">`).join('') + prod.map(p=>`<option value="${p.simple_code}">`).join('') + fgs.map(f=>`<option value="${f.code}">`).join('');
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">Auditor View · Read-only</div>
+    <div class="page-title">มุมมองสำหรับ Auditor</div>
+    <div class="page-desc">ภาพรวมระบบสำหรับการตรวจสอบ — ไม่มีปุ่มแก้ไข/เพิ่มข้อมูลในมุมมองนี้ ใช้สำหรับค้นหาและดูเท่านั้น</div>
+    <div class="grid-cards" style="margin-bottom:22px;">
+      <div class="stat-card" style="cursor:default;"><div class="num">${s.totalLots}</div><div class="lbl">Production Lot ทั้งหมดในระบบ</div></div>
+      <div class="stat-card" style="cursor:default;"><div class="num">${s.docPct}%</div><div class="lbl">เอกสารแนบครบ (${s.doneDocSlots}/${s.totalDocSlots} รายการ)</div></div>
+      <div class="stat-card" style="cursor:default;"><div class="num">${s.ccpFail}</div><div class="lbl">ผล CCP "ไม่ผ่าน" (จาก ${s.ccpTotal} รายการที่บันทึก)</div>
+        <span class="tag" style="background:${s.ccpFail>0?'var(--red-100)':'var(--green-100)'};color:${s.ccpFail>0?'var(--red-600)':'var(--green-700)'};">${s.ccpFail>0?'ต้องตรวจสอบเพิ่ม':'ปกติทั้งหมด'}</span>
+      </div>
+      <div class="stat-card" style="cursor:default;"><div class="num">${s.totalShipments}</div><div class="lbl">รายการส่งมอบลูกค้า</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">ค้นหา Lot / ลูกค้า เพื่อดูสายการทวนสอบย้อนกลับเต็มรูปแบบ</div>
+      <div class="trace-search">
+        <input type="text" id="auditorTraceInput" list="auditorLotList" placeholder="เช่น 2569227 01, 26081501, ชื่อลูกค้า หรือเลขที่ใบส่งของ">
+        <datalist id="auditorLotList">${options}</datalist>
+        <button class="btn" onclick="auditorSearch()">ค้นหา</button>
+      </div>
+    </div>
+  `;
+}
+async function auditorSearch(){
+  const q=document.getElementById('auditorTraceInput').value.trim();
+  let prod=[], fgs=[];
+  try{ [prod, fgs] = await Promise.all([apiListProdLots(), apiListFgLots()]); }catch(e){}
+  const prodLot = prod.find(p=>p.code===q) || prod.find(p=>p.simple_code===q);
+  const fgLot = fgs.find(f=>f.code===q);
+  if(prodLot || fgLot){ navigateAndTrace(prodLot?prodLot.code:fgLot.code); return; }
+  navigateTo('trace');
+  setTimeout(()=>{ document.getElementById('shipSearch').value=q; searchShipments(); }, 0);
+}
+
+/* ================= Admin: Employees ================= */
+async function renderEmployeesPage(){
+  setLoading();
+  let list;
+  try{ list = await apiListEmployees(); }catch(e){ renderErrorState('ไม่สามารถโหลดรายชื่อผู้ใช้งานได้'); return; }
+  const rows = list.map(e=>`<tr>
+    <td>${e.employee_code}</td><td>${e.full_name}</td>
+    <td><span class="badge badge-ccp">${ROLE_LABEL[e.role]||e.role}</span></td>
+    <td>${e.active?'<span class="badge badge-pass">ใช้งานอยู่</span>':'<span class="badge badge-fail">ปิดใช้งาน</span>'}</td>
+    <td>${new Date(e.created_at).toLocaleString('th-TH')}</td>
+    <td><button class="btn btn-ghost btn-sm" onclick="toggleEmployeeActive('${e.id}', ${!e.active})">${e.active?'ปิดใช้งาน':'เปิดใช้งาน'}</button></td>
+  </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีผู้ใช้งาน</div></td></tr>`;
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">Admin</div>
+    <div class="page-title">จัดการผู้ใช้งาน</div>
+    <div class="page-desc">สร้าง User ใหม่และกำหนดบทบาท — เมนูนี้เห็นเฉพาะ Admin เท่านั้น</div>
+    <div class="card">
+      <div class="card-title">สร้างผู้ใช้งานใหม่</div>
+      <div class="form-grid">
+        <div class="field"><label>รหัสพนักงาน</label><input type="text" id="empCode" placeholder="เช่น QC1032"></div>
+        <div class="field"><label>ชื่อ-นามสกุล</label><input type="text" id="empName"></div>
+        <div class="field"><label>บทบาท</label><select id="empRole">
+          <option value="QC">QC / PRD (บันทึกข้อมูล)</option>
+          <option value="QA">QA / Manager (อ่านอย่างเดียว)</option>
+          <option value="AUDITOR">Auditor (อ่านอย่างเดียว)</option>
+          <option value="ADMIN">Admin (ทำได้ทุกอย่าง)</option>
+        </select></div>
+        <div class="field"><label>PIN เริ่มต้น</label><input type="text" id="empPin" placeholder="ตั้งรหัสเริ่มต้น ให้ผู้ใช้เปลี่ยนภายหลัง"></div>
+      </div>
+      <button class="btn" style="margin-top:10px;" onclick="createEmployee()">สร้างผู้ใช้งาน</button>
+      <div id="empCreateMsg" style="margin-top:10px;font-size:13px;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">ผู้ใช้งานทั้งหมด (${list.length})</div>
+      <table><thead><tr><th>รหัสพนักงาน</th><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th>สร้างเมื่อ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  `;
+}
+async function createEmployee(){
+  const code=document.getElementById('empCode').value.trim();
+  const name=document.getElementById('empName').value.trim();
+  const role=document.getElementById('empRole').value;
+  const pin=document.getElementById('empPin').value;
+  const msg=document.getElementById('empCreateMsg');
+  if(!code||!name||!pin){ msg.textContent='กรุณากรอกให้ครบ'; msg.style.color='var(--red-600)'; return; }
+  try{
+    await apiCreateEmployee(code,name,role,pin);
+    msg.textContent='สร้างผู้ใช้งานสำเร็จ'; msg.style.color='var(--green-700)';
+    renderEmployeesPage();
+  }catch(e){ msg.textContent='สร้างไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด (อาจมีรหัสพนักงานนี้อยู่แล้ว)'); msg.style.color='var(--red-600)'; }
+}
+async function toggleEmployeeActive(id, active){
+  try{ await apiSetEmployeeActive(id, active); renderEmployeesPage(); }catch(e){ alert('ทำรายการไม่สำเร็จ'); }
+}
+
+/* ================= Admin: Audit Log ================= */
+async function renderAuditLogPage(){
+  setLoading();
+  let list;
+  try{ list = await apiGetAuditLog(300); }catch(e){ renderErrorState('ไม่สามารถโหลด Audit Log ได้'); return; }
+  const rows = list.map(l=>`<tr>
+    <td>${new Date(l.created_at).toLocaleString('th-TH')}</td>
+    <td>${l.employee_code||'-'}</td>
+    <td><span class="badge badge-ccp">${l.employee_role||'-'}</span></td>
+    <td>${l.action}</td>
+    <td>${l.entity_type||'-'} ${l.entity_id?`<div class="lotsub">${l.entity_id}</div>`:''}</td>
+  </tr>`).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Log</div></td></tr>`;
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-eyebrow">Admin</div>
+    <div class="page-title">Audit Log</div>
+    <div class="page-desc">บันทึกทุก action ในระบบ (ล่าสุด 300 รายการ) — เมนูนี้เห็นเฉพาะ Admin เท่านั้น</div>
+    <div class="card"><table><thead><tr><th>เวลา</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>Action</th><th>Entity</th></tr></thead><tbody>${rows}</tbody></table></div>
+  `;
+}
+</script>
+</body>
+</html>
