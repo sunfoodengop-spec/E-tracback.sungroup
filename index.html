@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --ink:#1B2421; --ink-soft:#4B5650; --paper:#F6F5F0; --card:#FFFFFF; --line:#DEDCD2;
@@ -183,6 +184,59 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let session = null; // {token, employee_id, full_name, role}
 const ROLE_LABEL = {ADMIN:'Admin (ผู้ดูแลระบบ)', AUDITOR:'Auditor (อ่านอย่างเดียว)', QA:'QA / Manager', QC:'QC / PRD'};
 
+/* ================= GOOGLE DRIVE (สำหรับอัปโหลดรูปแทนการเก็บใน Supabase Storage) ================= */
+// TODO: ใส่ค่าจริงจาก Google Cloud Console (ดูขั้นตอนที่แนบให้)
+const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+const DRIVE_FOLDER_ID = 'YOUR_SHARED_DRIVE_FOLDER_ID';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+// เมื่ออัปโหลดเสร็จ ตั้งสิทธิ์เปิดดูให้ "ใครมีลิงก์ก็ดูได้" (anyone) — ถ้ามี Google Workspace ของบริษัท
+// แนะนำเปลี่ยนเป็น {type:'domain', domain:'yourcompany.com'} แทน จะปลอดภัยกว่า (จำกัดเฉพาะคนในบริษัท)
+const DRIVE_SHARE_PERMISSION = {role:'reader', type:'anyone'};
+
+let gDriveAccessToken = null;
+let gTokenClient = null;
+function ensureGoogleTokenClient(){
+  if(gTokenClient) return gTokenClient;
+  gTokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: DRIVE_SCOPE, callback: '' });
+  return gTokenClient;
+}
+function getDriveAccessToken(forceConsent){
+  return new Promise((resolve, reject)=>{
+    if(typeof google==='undefined' || !google.accounts){ reject(new Error('GOOGLE_SDK_NOT_LOADED')); return; }
+    const client = ensureGoogleTokenClient();
+    client.callback = (resp)=>{
+      if(resp.error){ reject(resp); return; }
+      gDriveAccessToken = resp.access_token;
+      resolve(resp.access_token);
+    };
+    if(gDriveAccessToken && !forceConsent){ resolve(gDriveAccessToken); return; }
+    client.requestAccessToken({ prompt: forceConsent ? 'consent' : '' });
+  });
+}
+async function uploadPhotoToDrive(file, labelPrefix){
+  let token = await getDriveAccessToken(false);
+  const doUpload = async (tk)=>{
+    const metadata = { name: `${labelPrefix}_${Date.now()}_${file.name}`, parents: [DRIVE_FOLDER_ID] };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], {type:'application/json'}));
+    form.append('file', file);
+    return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+      method:'POST', headers:{ Authorization:`Bearer ${tk}` }, body: form,
+    });
+  };
+  let res = await doUpload(token);
+  if(res.status===401){ gDriveAccessToken=null; token = await getDriveAccessToken(true); res = await doUpload(token); }
+  if(!res.ok) throw new Error('DRIVE_UPLOAD_FAILED');
+  const data = await res.json();
+  try{
+    await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
+      method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify(DRIVE_SHARE_PERMISSION),
+    });
+  }catch(e){ /* ไฟล์อัปโหลดสำเร็จแล้ว ต่อให้ตั้งสิทธิ์แชร์ไม่สำเร็จก็ไม่บล็อกการทำงานต่อ */ }
+  return data.webViewLink;
+}
+
 async function rpc(fnName, params){
   const { data, error } = await sb.rpc(fnName, params);
   if(error){ console.error(fnName, error); throw error; }
@@ -288,7 +342,8 @@ function buddhistYear(d){ return d.getFullYear()+543; }
 function parseDate(dateStr){ return new Date(dateStr+'T00:00:00'); }
 function genProdLotCode(dateStr, line){ const d=parseDate(dateStr); return `${buddhistYear(d)}${pad(dayOfYear(d),3)} ${pad(line,2)}`; }
 function genSimpleLot(dateStr, line){ const d=parseDate(dateStr); return `${String(d.getFullYear()).slice(-2)}${pad(d.getMonth()+1,2)}${pad(d.getDate(),2)}${pad(line,2)}`; }
-function genFGCode(dateStr, line, batch){ const d=parseDate(dateStr); return `${buddhistYear(d)}${pad(dayOfYear(d),3)} ${pad(line,2)}${pad(batch,2)}`; }
+function genFGCode(dateStr, line){ const d=parseDate(dateStr); return `${buddhistYear(d)}${pad(dayOfYear(d),3)} ${pad(line,2)}`; }
+function genFGSimple(dateStr, line){ return genSimpleLot(dateStr, line); }
 function pad2(n){return String(n).padStart(2,'0');}
 
 /* ================= STATION CONFIG ================= */
@@ -313,6 +368,7 @@ const ATTACH_STATIONS = [
   ]},
   {key:'specialcut', name:'ตัดแต่งพิเศษ + ปรุงรส', dept:'SC / QPT', fields:[
     {id:'productType', label:'ประเภทสินค้า', type:'select', options:['สดแช่เย็น','สดแช่แข็ง','Marinated แช่แข็ง']},
+    {id:'productCode', label:'Product Code (วัตถุดิบ/RM)', type:'text'},
     {id:'ingredientLot', label:'Lot วัตถุดิบปรุงรส', type:'text'},
     {id:'allergen', label:'สารก่อภูมิแพ้ (ถ้ามี)', type:'text'},
   ]},
@@ -379,6 +435,7 @@ const STATION_DOCS = {
     {no:'31', name:`การตรวจซากไก่ประจำวัน`, formNo:'FR-QRM-01-021', fmt:'Excel', erp:'ไม่มี', mb:'ใช้', qdoc:''},
     {no:'32', name:`รายงานการตรวจประสิทธิภาพเครื่อง Cropping`, formNo:'FR-QRM-01-021', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
     {no:'33', name:`รายงาน CCP 1`, formNo:'FR-QRM-01-030', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'IVQF-5', name:`รายงานการแยก Sublot OH (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
   ],
   chiller: [
     {no:'34', name:`บันทึกการจัดแยก Lot`, formNo:'FR-CUT-01-069', fmt:'google sheet', erp:'มี', mb:'', qdoc:''},
@@ -410,6 +467,7 @@ const STATION_DOCS = {
     {no:'56', name:`ตัวอย่าง sensory`, formNo:'FR-QA-01-038 Rev.00', fmt:'กระดาษ', erp:'ไม่มี', mb:'', qdoc:''},
     {no:'57', name:`รายงานการตรวจเช็คสินค้า`, formNo:'FR-QPT-01-105 Rev.01', fmt:'กระดาษ', erp:'ไม่มี', mb:'', qdoc:''},
     {no:'58', name:`รายงานยอดถุงแผนก SC`, formNo:'', fmt:'Excel', erp:'', mb:'', qdoc:''},
+    {no:'IVQF-4', name:`รายงานผลิตสิน BL (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
   ],
   bagprep: [
     {no:'59', name:`รายงานการพิมพ์ถุงประจำวัน`, formNo:'FR-PKG-02-002', fmt:'', erp:'', mb:'', qdoc:''},
@@ -417,11 +475,13 @@ const STATION_DOCS = {
     {no:'61', name:`รายงานการแจ้งเบิกถุงของผลิตกับ PKG`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
     {no:'62', name:`รายงานการตรวจรับวัตถุดิบกล่อง`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
     {no:'63', name:`รายงานการรับวัตถุดิบเข้า`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'IVQF-2', name:`รายงานการเบิกถุง IVQF (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
   ],
   freezing: [
     {no:'64', name:`รายงานบันทึกผลผลิตสินค้าเข้าฟรีส`, formNo:'FR-PAC-01-052', fmt:'Excel', erp:'', mb:'', qdoc:''},
     {no:'65', name:`รายงานบรรจุสินค้า`, formNo:'FR-PAC-03-002', fmt:'Excel', erp:'', mb:'', qdoc:''},
     {no:'66', name:`CCP 3. : Metal detector performance inspection report (Chilled products)`, formNo:'FR-QPT-01-001 Rev.12', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'IVQF-1', name:`รายงานการบรรจุสินค้า IVQF (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
   ],
   boxing: [
     {no:'67', name:`รายงาน Temperature Check`, formNo:'FR-QPD-01-013', fmt:'', erp:'', mb:'', qdoc:''},
@@ -431,6 +491,7 @@ const STATION_DOCS = {
     {no:'71', name:`รายงานตรวจสอบเครื่องตรวจจับโลหะ (สินค้าแช่แข็ง)`, formNo:'FR-QPD-01-005', fmt:'', erp:'', mb:'', qdoc:''},
     {no:'72', name:`แบบฟอร์มสรุปยอดรวมสินค้า`, formNo:'FR-PAC-03-004', fmt:'', erp:'', mb:'', qdoc:''},
     {no:'73', name:`แบบฟอร์มสรุปยอดรวม`, formNo:'FR-PAC-01-018', fmt:'', erp:'', mb:'', qdoc:''},
+    {no:'IVQF-3', name:`รายงานการเบิกกล่อง IVQF (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
   ],
   coldstorage: [
     {no:'74', name:`รายงานรับ-จ่ายสินค้า`, formNo:'FR-CS-01-042', fmt:'', erp:'', mb:'', qdoc:''},
@@ -454,7 +515,7 @@ async function apiDeleteProdLot(code){ return await rpc('rpc_delete_production_l
 async function apiListAttachRecords(lotCode, station){ return await rpc('rpc_list_attach_records', {p_session_token:session.token, p_prod_lot_code:lotCode||null, p_station:station||null}); }
 async function apiCreateAttachRecord(lotCode, station, fields){ return await rpc('rpc_create_attach_record', {p_session_token:session.token, p_prod_lot_code:lotCode, p_station:station, p_fields:fields}); }
 async function apiListFgLots(){ return await rpc('rpc_list_fg_lots', {p_session_token:session.token}); }
-async function apiCreateFgLot(dateStr, line, batch, rmSources, fields){ return await rpc('rpc_create_fg_lot', {p_session_token:session.token, p_lot_date:dateStr, p_line:line, p_batch:Number(batch), p_rm_sources:rmSources, p_fields:fields}); }
+async function apiCreateFgLot(dateStr, line, rmSources, fields){ return await rpc('rpc_create_fg_lot', {p_session_token:session.token, p_lot_date:dateStr, p_line:line, p_rm_sources:rmSources, p_fields:fields}); }
 async function apiListFinalRecords(station, sourceCode){ return await rpc('rpc_list_final_records', {p_session_token:session.token, p_station:station||null, p_source_code:sourceCode||null}); }
 async function apiCreateFinalRecord(station, sourceCodes, fields){ return await rpc('rpc_create_final_record', {p_session_token:session.token, p_station:station, p_source_codes:sourceCodes, p_fields:fields}); }
 async function apiListFarmMap(){ return await rpc('rpc_list_farm_map', {p_session_token:session.token}); }
@@ -487,14 +548,26 @@ function docItemHtml(stationKey, recordType, recordId, d, evidence){
   const link = evidence ? (evidence.link||'') : '';
   const done = !!link;
   const statusBadge = done ? `<span class="badge badge-pass">แนบแล้ว</span>` : `<span class="badge badge-fail">ยังไม่แนบ</span>`;
-  const placeholder = isSheetLike(d.fmt) ? 'วางลิงก์ Google Sheet / Excel Online ของเอกสารนี้' : 'วางลิงก์ไฟล์ (เช่น แชร์จาก Google Drive) — อัปโหลดตรงเปิดใน Patch 2';
-  const evidenceHtml = canWrite() ? `<div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
-      <input type="text" value="${link}" placeholder="${placeholder}" data-doc-link="${d.no}"
-        style="flex:1;padding:6px 8px;font-size:12px;">
-      <button class="btn btn-ghost btn-sm" style="white-space:nowrap;" onclick="saveDocLink('${recordType}','${recordId}','${stationKey}','${d.no}')">บันทึกลิงก์</button>
-      ${link?`<a href="${link}" target="_blank" class="btn btn-ghost btn-sm" style="white-space:nowrap;">เปิดดู ↗</a>`:''}
-    </div>` :
-    (link ? `<div style="margin-top:6px;"><a href="${link}" target="_blank" class="btn btn-ghost btn-sm">เปิดดูเอกสาร ↗</a></div>` : `<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">ยังไม่มีการแนบเอกสาร</div>`);
+  let evidenceHtml;
+  if(isSheetLike(d.fmt)){
+    // เอกสารที่เป็น Google Sheet/Excel/Ecertify เดิมอยู่แล้ว — วางลิงก์เอง ไม่ต้องอัปโหลดรูป
+    evidenceHtml = canWrite() ? `<div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
+        <input type="text" value="${link}" placeholder="วางลิงก์ Google Sheet / Excel Online ของเอกสารนี้" data-doc-link="${d.no}"
+          style="flex:1;padding:6px 8px;font-size:12px;">
+        <button class="btn btn-ghost btn-sm" style="white-space:nowrap;" onclick="saveDocLink('${recordType}','${recordId}','${stationKey}','${d.no}')">บันทึกลิงก์</button>
+        ${link?`<a href="${link}" target="_blank" class="btn btn-ghost btn-sm" style="white-space:nowrap;">เปิดดู ↗</a>`:''}
+      </div>` :
+      (link ? `<div style="margin-top:6px;"><a href="${link}" target="_blank" class="btn btn-ghost btn-sm">เปิดดูเอกสาร ↗</a></div>` : `<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">ยังไม่มีการแนบเอกสาร</div>`);
+  } else {
+    // เอกสารกระดาษ/ตั๋ว/ผลแลป — ถ่ายรูปแล้วอัปโหลดขึ้น Google Drive อัตโนมัติ ได้ลิงก์กลับมาเก็บใน link
+    const uploadBtn = canWrite() ? `<label class="btn btn-ghost btn-sm" style="cursor:pointer;white-space:nowrap;">📷 ถ่าย/แนบรูป → Google Drive
+        <input type="file" accept="image/*,application/pdf" capture="environment" style="display:none;" onchange="handleDrivePhoto(this,'${stationKey}','${recordType}','${recordId}','${d.no}')">
+      </label>` : '';
+    evidenceHtml = `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      ${uploadBtn}
+      ${link?`<a href="${link}" target="_blank" class="btn btn-ghost btn-sm">เปิดดูเอกสาร ↗</a>`:(canWrite()?'':`<span style="font-size:12px;color:var(--ink-soft);">ยังไม่มีการแนบเอกสาร</span>`)}
+    </div>`;
+  }
   return `<div class="doc-item" id="docitem-${recordType}-${recordId}-${d.no}">
     <div style="flex:1;">
       <span class="doc-name">#${d.no} ${d.name} ${statusBadge}</span>
@@ -502,6 +575,29 @@ function docItemHtml(stationKey, recordType, recordId, d, evidence){
       ${evidenceHtml}
     </div>
   </div>`;
+}
+async function handleDrivePhoto(input, stationKey, recordType, recordId, docNo){
+  const file = input.files[0];
+  if(!file) return;
+  const itemEl = document.getElementById(`docitem-${recordType}-${recordId}-${docNo}`);
+  const originalHtml = itemEl ? itemEl.innerHTML : '';
+  if(itemEl) itemEl.innerHTML = `<div style="padding:10px 4px;font-size:12.5px;color:var(--ink-soft);">กำลังอัปโหลดขึ้น Google Drive...</div>`;
+  try{
+    const link = await uploadPhotoToDrive(file, `${stationKey}_${docNo}`);
+    await apiUpsertDocEvidence(recordType, recordId, stationKey, docNo, link);
+    await refreshDocItem(stationKey, recordType, recordId, docNo);
+  }catch(e){
+    if(itemEl) itemEl.innerHTML = originalHtml;
+    if((e && e.message)==='GOOGLE_SDK_NOT_LOADED'){ alert('ยังโหลด Google SDK ไม่เสร็จ กรุณารอสักครู่แล้วลองใหม่'); }
+    else { alert('อัปโหลดขึ้น Google Drive ไม่สำเร็จ — ตรวจสอบการเชื่อมต่อและสิทธิ์ Google Drive แล้วลองใหม่'); }
+  }
+}
+async function refreshDocItem(stationKey, recordType, recordId, docNo){
+  const evMap = await fetchEvidenceMap(recordType, recordId);
+  const doc = (STATION_DOCS[stationKey]||[]).find(x=>x.no===docNo);
+  const el = document.getElementById(`docitem-${recordType}-${recordId}-${docNo}`);
+  if(el && doc) el.outerHTML = docItemHtml(stationKey, recordType, recordId, doc, evMap[docNo]);
+  refreshDocSummary(stationKey, recordType, recordId);
 }
 async function saveDocLink(recordType, recordId, stationKey, docNo){
   const input = document.querySelector(`#docitem-${recordType}-${recordId}-${docNo} [data-doc-link="${docNo}"]`);
@@ -768,12 +864,13 @@ async function renderFGPage(){
   const srcHtml = prod.length ? prod.map(p=>`<label class="source-item"><input type="checkbox" class="rmChk" value="${p.code}"><span class="lotcode">${p.code}</span> — ${p.lot_date} Sub Lot ${p.line}</label>`).join('')
     : `<div class="empty">ยังไม่มี Production Lot (RM) ในระบบ</div>`;
   const rows=fgs.map(fg=>`<tr>
-    <td class="lotcode fg" onclick="navigateAndTrace('${fg.code}')">${fg.code}</td>
-    <td>${fg.lot_date} / Sub Lot ${fg.line} / Batch ${pad2(fg.batch)}</td>
+    <td><span class="lotpill lotcode fg" style="cursor:pointer;" onclick="navigateAndTrace('${fg.code}')">${fg.code}<span style="opacity:.7">${fg.simple_code||'-'}</span></span></td>
+    <td>${fg.lot_date} / Sub Lot ${fg.line}</td>
     <td>${(fg.rm_sources||[]).map(s=>`<span class="src-tag" onclick="navigateAndTrace('${s}')">${s}</span>`).join('')}</td>
+    <td>${(fg.fields||{}).productCode||'-'}</td>
     <td>${(fg.fields||{}).productType||'-'}</td>
     <td>${(fg.fields||{}).allergen||'-'}</td>
-  </tr>`).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี LOT FG</div></td></tr>`;
+  </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มี LOT FG</div></td></tr>`;
 
   const createFormHtml = canWrite() ? `
     <div class="card">
@@ -782,7 +879,7 @@ async function renderFGPage(){
       <div class="form-grid">
         <div class="field"><label>วันที่แพ็ค (FG)</label><input type="date" id="fgDate" value="${new Date().toISOString().slice(0,10)}"></div>
         <div class="field"><label>Sub Lot</label><select id="fgLine"><option value="1">Sub Lot 1</option><option value="2">Sub Lot 2</option><option value="3">Sub Lot 3</option><option value="4">Sub Lot 4</option><option value="99H">Sub Lot 99H (ข้อมูลทดสอบ)</option></select></div>
-        <div class="field"><label>เลข Batch</label><input type="number" id="fgBatch" value="1" min="1"></div>
+        <div class="field"><label>Product Code (สินค้าสำเร็จรูป)</label><input type="text" id="fgProductCode" placeholder="เช่น 111117302"></div>
         <div class="field"><label>ประเภทสินค้า</label><select id="fgProductType"><option>สดแช่แข็ง IVQF</option><option>Marinated แช่แข็ง IVQF</option></select></div>
         <div class="field"><label>Lot วัตถุดิบปรุงรส</label><input type="text" id="fgIngredientLot" placeholder="เช่น ING-0077"></div>
         <div class="field"><label>สารก่อภูมิแพ้ (ถ้ามี)</label><input type="text" id="fgAllergen" placeholder="เช่น ถั่วเหลือง, กลูเตน"></div>
@@ -795,34 +892,34 @@ async function renderFGPage(){
   document.getElementById('mainContent').innerHTML=`
     <div class="page-eyebrow">IVQF</div>
     <div class="page-title">สร้าง LOT FG (IVQF)</div>
-    <div class="page-desc">LOT FG มีรูปแบบ พ.ศ.+วันจูเลียน + Sub Lot(2หลัก)+Batch(2หลัก) เช่น 2569078 0101 — วันที่ของ LOT FG (วันแพ็ค) กรอกแยกอิสระจาก LOT RM แล้วเลือก LOT RM (Production Lot) ที่ใช้เป็นวัตถุดิบ</div>
+    <div class="page-desc">LOT FG มีรูปแบบเดียวกับ Lot DLD ทุกประการ (พ.ศ.+วันจูเลียน+Sub Lot) พร้อม Lot day (YYMMDD) คู่กัน — วันที่ของ LOT FG (วันแพ็ค) กรอกแยกอิสระจาก LOT RM แล้วเลือก LOT RM (Production Lot) ที่ใช้เป็นวัตถุดิบ</div>
     ${createFormHtml}
     <div class="card">
       <div class="card-title">LOT FG ทั้งหมด (${fgs.length})</div>
-      <table><thead><tr><th>LOT FG</th><th>วันที่/Sub Lot/Batch</th><th>LOT RM ต้นทาง</th><th>ประเภทสินค้า</th><th>Allergen</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th>LOT FG (Lot No / Lot day)</th><th>วันที่/Sub Lot</th><th>LOT RM ต้นทาง</th><th>Product Code</th><th>ประเภทสินค้า</th><th>Allergen</th></tr></thead><tbody>${rows}</tbody></table>
     </div>
   `;
   if(canWrite()){
-    const upd=()=>{ const d=document.getElementById('fgDate').value,l=document.getElementById('fgLine').value,b=document.getElementById('fgBatch').value||1;
-      document.getElementById('fgPreview').innerHTML = d? `จะได้ LOT FG: <b>${genFGCode(d,l,b)}</b>` : ''; };
+    const upd=()=>{ const d=document.getElementById('fgDate').value,l=document.getElementById('fgLine').value;
+      document.getElementById('fgPreview').innerHTML = d? `จะได้ LOT FG (Lot No): <b>${genFGCode(d,l)}</b> &nbsp;|&nbsp; Lot day: <b>${genFGSimple(d,l)}</b>` : ''; };
     document.getElementById('fgDate').addEventListener('input', upd);
     document.getElementById('fgLine').addEventListener('change', upd);
-    document.getElementById('fgBatch').addEventListener('input', upd);
     upd();
   }
 }
 async function createFGLot(){
   const rm=Array.from(document.querySelectorAll('.rmChk:checked')).map(el=>el.value);
   if(rm.length===0){ alert('กรุณาเลือก LOT RM ต้นทางอย่างน้อย 1 รายการ'); return; }
-  const d=document.getElementById('fgDate').value, l=document.getElementById('fgLine').value, b=document.getElementById('fgBatch').value||1;
+  const d=document.getElementById('fgDate').value, l=document.getElementById('fgLine').value;
   if(!d){ alert('กรุณาระบุวันที่แพ็ค'); return; }
   const fields={
+    productCode:document.getElementById('fgProductCode').value,
     productType:document.getElementById('fgProductType').value,
     ingredientLot:document.getElementById('fgIngredientLot').value,
     allergen:document.getElementById('fgAllergen').value,
     ivqfTempC:document.getElementById('fgTemp').value,
   };
-  try{ await apiCreateFgLot(d,l,b,rm,fields); renderFGPage(); }
+  try{ await apiCreateFgLot(d,l,rm,fields); renderFGPage(); }
   catch(e){ alert('สร้างไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
 
@@ -1008,6 +1105,42 @@ function upstreamNodesFor(prodLot, farmMap){
   return html;
 }
 
+const IVQF_CHECKLIST_ITEMS = [
+  {ref:'#76 ฟอร์มตู้ (Cold Storage)',                          needs:['pcFG','lotNoFG','lotDayFG']},
+  {ref:'#82 Re. loading (ส่งมอบ/Loading)',                     needs:['pcFG','lotNoFG']},
+  {ref:'#74/#81 รายงานรับ-จ่ายสินค้า (Cold Storage/ส่งมอบ)',    needs:['pcFG','lotDayFG']},
+  {ref:'IVQF-1 รายงานการบรรจุสินค้า IVQF (Freezing)',          needs:['pcFG','lotNoFG','lotDayFG']},
+  {ref:'IVQF-2 รายงานการเบิกถุง IVQF (เตรียมถุง)',              needs:['pcFG','lotNoFG']},
+  {ref:'IVQF-3 รายงานการเบิกกล่อง IVQF (ลงกล่อง)',              needs:['pcFG','lotNoFG']},
+  {ref:'IVQF-4 รายงานผลิตสิน BL (ตัดแต่งพิเศษ)',                needs:['pcRM','lotDayRM']},
+  {ref:'#45 รายงานการแยก SUB LOT รับส่ง SUB LOT (เลาะกระดูก)',  needs:['pcRM','lotNoRM']},
+  {ref:'IVQF-5 รายงานการแยก Sublot OH (ล้วง-ล้างซาก)',          needs:['pcRM','lotNoRM']},
+];
+async function ivqfChecklistHtml(fgLot, prod){
+  const pcFG = (fgLot.fields||{}).productCode || '-';
+  const rmDetails = await Promise.all((fgLot.rm_sources||[]).map(async rc=>{
+    const rp = prod.find(p=>p.code===rc);
+    let pc = '-';
+    try{
+      const scRecs = await apiListAttachRecords(rc, 'specialcut');
+      const withCode = scRecs.find(r=>(r.fields||{}).productCode);
+      if(withCode) pc = withCode.fields.productCode;
+    }catch(e){}
+    return { code: rc, simple: rp?rp.simple_code:'-', pc };
+  }));
+  const valFor = (key)=>{
+    if(key==='pcFG') return `Product Code: <b>${pcFG}</b>`;
+    if(key==='lotNoFG') return `FG Lot No: <b>${fgLot.code}</b>`;
+    if(key==='lotDayFG') return `FG Lot day: <b>${fgLot.simple_code||'-'}</b>`;
+    if(key==='pcRM') return rmDetails.map(r=>`Product Code: <b>${r.pc}</b>`).join('<br>');
+    if(key==='lotNoRM') return rmDetails.map(r=>`RM Lot No: <b>${r.code}</b>`).join('<br>');
+    if(key==='lotDayRM') return rmDetails.map(r=>`RM Lot day: <b>${r.simple}</b>`).join('<br>');
+    return '-';
+  };
+  const rows = IVQF_CHECKLIST_ITEMS.map(item=>`<tr><td>${item.ref}</td><td>${item.needs.map(valFor).join('<br>')}</td></tr>`).join('');
+  return `<table><thead><tr><th>รายงานที่ต้องตรวจ</th><th>ข้อมูลที่ต้องชนต่อ</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 async function runTrace(){
   const rawCode=document.getElementById('traceInput').value.trim();
   const resultEl=document.getElementById('traceResult');
@@ -1029,7 +1162,7 @@ async function runTrace(){
     noteHtml = `<div class="note-banner">พบจาก Lot เอกสาร (YYMMDD) "${rawCode}" ตรงกับ Lot DLD <b>${prodLot.code}</b> — แสดงผล Trace ของ Lot นี้ด้านล่าง</div>`;
   }
 
-  let backHtml='', fwdHtml='', selfHtml='', accordionHtml='';
+  let backHtml='', fwdHtml='', selfHtml='', accordionHtml='', ivqfChecklist='';
 
   if(prodLot){
     backHtml = upstreamNodesFor(prodLot, farmMap);
@@ -1042,7 +1175,7 @@ async function runTrace(){
     }catch(e){}
     attach.sort((a,b)=> ATTACH_STATIONS.findIndex(s=>s.key===a.station) - ATTACH_STATIONS.findIndex(s=>s.key===b.station));
     const fwdAttach = attach.map(r=>nodeHtmlGeneric(ATTACH_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForAttach(r), false, false)).join('');
-    const usedByFg = fgUsing.map(f=>nodeHtmlGeneric(f.code, `ใช้เป็น LOT RM ของ LOT FG · ${f.lot_date} Sub Lot ${f.line} Batch ${pad2(f.batch)}`, '', false, true)).join('');
+    const usedByFg = fgUsing.map(f=>nodeHtmlGeneric(f.code, `ใช้เป็น LOT RM ของ LOT FG · Lot day: ${f.simple_code||'-'} · ${f.lot_date} Sub Lot ${f.line}`, '', false, true)).join('');
     const fin = finalRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('');
     fwdHtml = (fwdAttach + usedByFg + fin) || `<div class="empty-state">ยังไม่มีข้อมูลถัดไป</div>`;
 
@@ -1061,9 +1194,10 @@ async function runTrace(){
     }));
     backHtml = rmParts.join('') || `<div class="empty-state">ไม่พบ LOT RM ต้นทาง</div>`;
     const fgBadges = fgLot.fields && fgLot.fields.ivqfTempC ? `<span class="badge badge-ccp">CCP อุณหภูมิ IVQF: ${fgLot.fields.ivqfTempC}°C</span>` : '';
-    selfHtml = nodeHtmlGeneric(fgLot.code, `LOT FG (IVQF) · ${(fgLot.fields||{}).productType||''} · ${fgLot.lot_date} Sub Lot ${fgLot.line} Batch ${pad2(fgLot.batch)}`, fgBadges, true, true);
+    selfHtml = nodeHtmlGeneric(fgLot.code, `LOT FG (IVQF) · Lot day: ${fgLot.simple_code||'-'} · Product Code: ${(fgLot.fields||{}).productCode||'-'} · ${(fgLot.fields||{}).productType||''} · ${fgLot.lot_date} Sub Lot ${fgLot.line}`, fgBadges, true, true);
     let finalRecs=[]; try{ finalRecs = await apiListFinalRecords(null, code); }catch(e){}
     fwdHtml = finalRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('') || `<div class="empty-state">ยังไม่มีข้อมูลถัดไป</div>`;
+    ivqfChecklist = await ivqfChecklistHtml(fgLot, prod);
   }
 
   resultEl.innerHTML=`
@@ -1076,6 +1210,11 @@ async function runTrace(){
       <div class="card-title">ข้อมูลการผลิต 7 Station ของ Lot นี้ (${prodLot.code})</div>
       <div class="page-desc" style="margin-bottom:14px;">คลิกแต่ละ Station เพื่อดูข้อมูลที่บันทึกไว้ ${canWrite()?'ติ๊กสถานะเอกสาร Masterlist หรือเพิ่มข้อมูลใหม่ได้ทันที':'(บทบาทของคุณดูได้อย่างเดียว)'}</div>
       ${accordionHtml}
+    </div>` : ''}
+    ${fgLot ? `<div class="card" style="margin-top:22px;">
+      <div class="card-title">IVQF Traceback Checklist — เอกสารที่ต้องตรวจสำหรับ LOT FG นี้</div>
+      <div class="page-desc" style="margin-bottom:14px;">รายชื่อรายงานทั้งหมดที่ต้องเปิดตรวจตอนทำ Audit สาย IVQF พร้อมค่าที่ต้อง "ชนต่อ" ในแต่ละรายงาน (Product Code / Lot No / Lot day)</div>
+      ${ivqfChecklist}
     </div>` : ''}`;
 }
 
