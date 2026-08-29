@@ -1084,8 +1084,9 @@ async function searchShipments(){
     </div>`).join('');
 }
 
-function nodeHtmlGeneric(title, sub, badges, isSelf, isFg){
-  return `<div class="trace-node ${isSelf?'self':''} ${isFg?'fg':''}"><div class="st">${sub}</div><div class="code">${title}</div><div style="margin-top:4px;">${badges}</div></div>`;
+function nodeHtmlGeneric(title, sub, badges, isSelf, isFg, clickCode){
+  const clickAttr = clickCode ? ` style="cursor:pointer;" onclick="navigateAndTrace('${clickCode}')"` : '';
+  return `<div class="trace-node ${isSelf?'self':''} ${isFg?'fg':''}"${clickAttr}><div class="st">${sub}</div><div class="code">${title}</div><div style="margin-top:4px;">${badges}</div></div>`;
 }
 function ccpBadgesForAttach(rec){
   const cfg=ATTACH_MAP[rec.station]; if(!cfg||!cfg.fields) return '';
@@ -1175,7 +1176,7 @@ async function runTrace(){
     }catch(e){}
     attach.sort((a,b)=> ATTACH_STATIONS.findIndex(s=>s.key===a.station) - ATTACH_STATIONS.findIndex(s=>s.key===b.station));
     const fwdAttach = attach.map(r=>nodeHtmlGeneric(ATTACH_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForAttach(r), false, false)).join('');
-    const usedByFg = fgUsing.map(f=>nodeHtmlGeneric(f.code, `ใช้เป็น LOT RM ของ LOT FG · Lot day: ${f.simple_code||'-'} · ${f.lot_date} Sub Lot ${f.line}`, '', false, true)).join('');
+    const usedByFg = fgUsing.map(f=>nodeHtmlGeneric(f.code, `ใช้เป็น LOT RM ของ LOT FG · Lot day: ${f.simple_code||'-'} · ${f.lot_date} Sub Lot ${f.line} · คลิกเพื่อดู Trace ของ LOT FG นี้`, '', false, true, f.code)).join('');
     const fin = finalRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('');
     fwdHtml = (fwdAttach + usedByFg + fin) || `<div class="empty-state">ยังไม่มีข้อมูลถัดไป</div>`;
 
@@ -1183,7 +1184,7 @@ async function runTrace(){
   } else if(fgLot){
     const rmParts = await Promise.all((fgLot.rm_sources||[]).map(async rc=>{
       const rp = prod.find(p=>p.code===rc);
-      let n = nodeHtmlGeneric(rc, `LOT RM (Production Lot) ${rp?`· ${rp.lot_date} Sub Lot ${rp.line}`:''}`, '', false, false);
+      let n = nodeHtmlGeneric(rc, `LOT RM (Production Lot) ${rp?`· ${rp.lot_date} Sub Lot ${rp.line}`:''} · คลิกเพื่อดู Trace เต็มของ Lot นี้ (ถึงฟาร์ม/อาหารสัตว์)`, '', false, false, rc);
       try{
         const attach = await apiListAttachRecords(rc);
         attach.sort((a,b)=> ATTACH_STATIONS.findIndex(s=>s.key===a.station) - ATTACH_STATIONS.findIndex(s=>s.key===b.station));
