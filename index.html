@@ -356,12 +356,15 @@ const ATTACH_STATIONS = [
   {key:'evisceration', name:'ล้วง-ล้างซาก', dept:'EVI / QRM', ccpNote:'CCP 1', fields:[
     {id:'weightIn', label:'น้ำหนักเข้า (กก.)', type:'number'},
     {id:'weightOut', label:'น้ำหนักออก (กก.)', type:'number'},
+    {id:'birdsIn', label:'จำนวนตัวเข้าเชือด', type:'number'},
+    {id:'birdsToChiller', label:'จำนวนตัวลง Chiller', type:'number'},
+    {id:'condemnCount', label:'จำนวน Condemn', type:'number'},
+    {id:'birdsDomesticSale', label:'จำนวนตัวไปขายภายในประเทศ', type:'number'},
     {id:'ccp1Result', label:'ผลตรวจ CCP 1', type:'select', options:['ผ่าน','ไม่ผ่าน'], ccp:'CCP1'},
   ]},
-  {key:'chiller', name:'Chiller', dept:'CHILLER / QPT', ccpNote:'CCP 2 + CCP 3', fields:[
+  {key:'chiller', name:'Chiller OH', dept:'CHILLER / QPT', ccpNote:'CCP 2', fields:[
     {id:'productType', label:'ชนิดผลิตภัณฑ์', type:'select', options:['ซากไก่','กึ๋น','ขาซี','ปีก (China product)']},
     {id:'tempC', label:'CCP 2 — อุณหภูมิ (°C)', type:'number', ccp:'CCP2'},
-    {id:'metalDetect', label:'CCP 3 — ผลตรวจโลหะ', type:'select', options:['ผ่าน','ไม่ผ่าน'], ccp:'CCP3'},
   ]},
   {key:'cutting', name:'เลาะกระดูก', dept:'CUT', fields:[
     {id:'subLotNote', label:'หมายเหตุ SUB LOT ภายใน', type:'text'},
@@ -1073,12 +1076,13 @@ async function searchShipments(){
     <div class="trace-node" style="margin-top:12px;">
       <div class="st">ส่งมอบ ${new Date(r.created_at).toLocaleString('th-TH')} · เลขที่ใบส่งของ ${(r.fields||{}).doNumber||'-'}</div>
       <div class="code">${(r.fields||{}).customer||'ลูกค้าไม่ระบุชื่อ'}</div>
+      <div style="margin-top:8px;"><button class="btn btn-sm" onclick="runFullBackwardChain('${r.id}')">ไล่ผังย้อนกลับเต็ม (Loading → ฟาร์ม/โรงฟัก)</button></div>
       <div style="margin-top:6px;">${(r.source_codes||[]).map(c=>{
         const isFg=fgs.find(f=>f.code===c);
         const pl=prod.find(p=>p.code===c);
         const pairLabel = pl ? ` <span style="opacity:.7">(Lot เอกสารฟอร์มตู้: ${pl.simple_code})</span>` : '';
         return `<div style="margin-top:4px;">
-          <button class="btn btn-sm btn-ghost" onclick="navigateAndTrace('${c}')">ไล่ย้อนกลับจาก ${c} ${isFg?'(LOT FG)':'(Lot DLD)'}</button>${pairLabel}
+          <button class="btn btn-sm btn-ghost" onclick="navigateAndTrace('${c}')">ดู Lot ${c} โดยตรง ${isFg?'(LOT FG)':'(Lot DLD)'}</button>${pairLabel}
         </div>`;
       }).join('')}</div>
     </div>`).join('');
@@ -1104,6 +1108,64 @@ function upstreamNodesFor(prodLot, farmMap){
   if(farm.breeder_flock) html += nodeHtmlGeneric(farm.breeder_flock, 'ฝูงพ่อแม่พันธุ์ต้นทางของลูกไก่ (เฟส 2)', '', false, false);
   if(farm.hatchery_batch) html += nodeHtmlGeneric(farm.hatchery_batch, 'ล็อตโรงฟักไข่ที่ผลิตลูกไก่ (เฟส 2)', '', false, false);
   return html;
+}
+
+/* ================= Backward เต็มเส้นทางเดียว: ส่งมอบ (Loading) -> ... -> ฟาร์ม/โรงฟัก ================= */
+async function backwardChainForCode(code, prod, fgs, farmMapAll){
+  let html = '';
+  const fgLot = fgs.find(f=>f.code===code);
+  const prodLot = prod.find(p=>p.code===code);
+
+  // Boxing / Cold Storage ที่อ้างอิง Lot นี้ (เรียงย้อนกลับ: Cold Storage มาก่อน Boxing เพราะลำดับไปข้างหน้าคือ Boxing -> Cold Storage -> ส่งมอบ)
+  let boxCsRecs = [];
+  try{ boxCsRecs = (await apiListFinalRecords(null, code)).filter(r=>r.station==='boxing'||r.station==='coldstorage'); }catch(e){}
+  const orderMap = {coldstorage:0, boxing:1};
+  boxCsRecs.sort((a,b)=> (orderMap[a.station]??9) - (orderMap[b.station]??9));
+  boxCsRecs.forEach(r=>{
+    html += nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false);
+  });
+
+  if(fgLot){
+    html += nodeHtmlGeneric(fgLot.code, `LOT FG (IVQF) · Lot day ${fgLot.simple_code||'-'} · Product Code ${(fgLot.fields||{}).productCode||'-'}`, '', false, true);
+    for(const rc of fgLot.rm_sources||[]){
+      html += await backwardChainForCode(rc, prod, fgs, farmMapAll);
+    }
+  } else if(prodLot){
+    html += nodeHtmlGeneric(prodLot.code, `Production Lot (Lot DLD) · Lot day ${prodLot.simple_code}`, '', false, false);
+    const reversedStations = ATTACH_STATIONS.slice().reverse(); // Freezing -> ... -> รับไก่ (ย้อนลำดับการผลิตจริง)
+    for(const s of reversedStations){
+      let recs=[]; try{ recs = await apiListAttachRecords(prodLot.code, s.key); }catch(e){}
+      recs.forEach(r=>{ html += nodeHtmlGeneric(s.name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForAttach(r), false, false); });
+    }
+    html += upstreamNodesFor(prodLot, farmMapAll);
+  } else {
+    html += `<div class="empty-state">ไม่พบข้อมูลของ ${code} ในระบบ</div>`;
+  }
+  return html;
+}
+async function runFullBackwardChain(shipRecordId){
+  const resultEl = document.getElementById('traceResult');
+  if(!resultEl) return;
+  resultEl.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังไล่ผังย้อนกลับ...</div>`;
+  resultEl.scrollIntoView({behavior:'smooth'});
+  let fin, prod, fgs, farmMapAll;
+  try{
+    [fin, prod, fgs, farmMapAll] = await Promise.all([apiListFinalRecords('shipment'), apiListProdLots(), apiListFgLots(), apiListFarmMap()]);
+  }catch(e){ resultEl.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
+  const ship = fin.find(r=>r.id===shipRecordId);
+  if(!ship){ resultEl.innerHTML = `<div class="note-banner">ไม่พบรายการส่งมอบนี้</div>`; return; }
+
+  let chain = nodeHtmlGeneric(
+    (ship.fields||{}).customer || 'ลูกค้าไม่ระบุชื่อ',
+    `จุดเริ่มต้น: ส่งมอบ / Loading · เลขที่ใบส่งของ ${(ship.fields||{}).doNumber||'-'} · ${new Date(ship.created_at).toLocaleString('th-TH')}`,
+    '', true, false
+  );
+  for(const sc of ship.source_codes||[]){
+    chain += await backwardChainForCode(sc, prod, fgs, farmMapAll);
+  }
+  resultEl.innerHTML = `
+    <div class="note-banner">ผังย้อนกลับเส้นทางเดียวต่อเนื่อง ตั้งแต่การส่งมอบ (Loading) จนถึงฟาร์ม/โรงฟัก เรียงตามลำดับเวลาย้อนกลับ</div>
+    <div style="max-width:640px;">${chain}</div>`;
 }
 
 const IVQF_CHECKLIST_ITEMS = [
