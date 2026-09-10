@@ -356,14 +356,14 @@ const ATTACH_STATIONS = [
   {key:'evisceration', name:'ล้วง-ล้างซาก', dept:'EVI / QRM', ccpNote:'CCP 1', fields:[
     {id:'weightIn', label:'น้ำหนักเข้า (กก.)', type:'number'},
     {id:'weightOut', label:'น้ำหนักออก (กก.)', type:'number'},
-    {id:'birdsIn', label:'จำนวนตัวเข้าเชือด', type:'number'},
-    {id:'birdsToChiller', label:'จำนวนตัวลง Chiller', type:'number'},
+    {id:'birdsIn', label:'จำนวนตัวเข้าเชือด-ไก่ตายก่อนเข้ากระบวนการ', type:'number'},
     {id:'condemnCount', label:'จำนวน Condemn', type:'number'},
     {id:'birdsDomesticSale', label:'จำนวนตัวไปขายภายในประเทศ', type:'number'},
     {id:'ccp1Result', label:'ผลตรวจ CCP 1', type:'select', options:['ผ่าน','ไม่ผ่าน'], ccp:'CCP1'},
   ]},
   {key:'chiller', name:'Chiller OH', dept:'CHILLER / QPT', ccpNote:'CCP 2', fields:[
     {id:'productType', label:'ชนิดผลิตภัณฑ์', type:'select', options:['ซากไก่','กึ๋น','ขาซี','ปีก (China product)']},
+    {id:'birdsToChiller', label:'จำนวนตัวเข้า Chiller', type:'number'},
     {id:'tempC', label:'CCP 2 — อุณหภูมิ (°C)', type:'number', ccp:'CCP2'},
   ]},
   {key:'cutting', name:'เลาะกระดูก', dept:'CUT', fields:[
@@ -452,6 +452,7 @@ const STATION_DOCS = {
     {no:'42', name:`รายงานการตรวจสอบค่าน้ำ Overflow กึน`, formNo:'FR-QPT-01-168', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
     {no:'43', name:`รายงานการตรวจวัดอุณหภูมิน้ำต้น-น้ำปลายชิลเลอร์`, formNo:'FR-QPT-01-083', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
     {no:'44', name:`รายงานการตรวจวัดอุณหภูมิน้ำต้น-น้ำปลายกึ๋น-ขาซี`, formNo:'FR-QPT-01-152', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
+    {no:'FLOW-1', name:`รายงานผลิตไก่ตัว OH (เพิ่มจาก Flow กระบวนการผลิต)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
   ],
   cutting: [
     {no:'45', name:`รายงานการแยก SUB LOT รับส่ง SUB LOT`, formNo:'FR-CUT-01-002', fmt:'กระดาษ', erp:'มี', mb:'', qdoc:''},
@@ -529,6 +530,27 @@ async function apiListEmployees(){ return await rpc('rpc_list_employees', {p_ses
 async function apiCreateEmployee(code,name,role){ return await rpc('rpc_create_employee', {p_session_token:session.token, p_employee_code:code, p_full_name:name, p_role:role}); }
 async function apiSetEmployeeActive(id,active){ return await rpc('rpc_set_employee_active', {p_session_token:session.token, p_employee_id:id, p_active:active}); }
 async function apiGetAuditLog(limit,code,action){ return await rpc('rpc_get_audit_log', {p_session_token:session.token, p_limit:limit||300, p_employee_code:code||null, p_action:action||null}); }
+async function apiSetDocVisibility(station, docNo, hidden){ return await rpc('rpc_set_doc_visibility', {p_session_token:session.token, p_station:station, p_doc_no:docNo, p_hidden:hidden}); }
+async function apiListDocVisibility(){ return await rpc('rpc_list_doc_visibility', {p_session_token:session.token}); }
+
+/* ================= ซ่อนเอกสารบางรายการจากมุมมอง Auditor (Admin ตั้งค่า) ================= */
+let docVisibilityCache = null;
+async function loadDocVisibility(force){
+  if(docVisibilityCache && !force) return docVisibilityCache;
+  try{
+    const rows = await apiListDocVisibility();
+    const m={}; rows.forEach(r=>{ m[r.station+'|'+r.doc_no]=true; });
+    docVisibilityCache = m;
+  }catch(e){ docVisibilityCache = {}; }
+  return docVisibilityCache;
+}
+function isDocHiddenSync(station, docNo){ return !!(docVisibilityCache && docVisibilityCache[station+'|'+docNo]); }
+async function visibleDocsFor(stationKey){
+  const all = STATION_DOCS[stationKey]||[];
+  if(session.role!=='AUDITOR') return all;
+  await loadDocVisibility();
+  return all.filter(d=>!isDocHiddenSync(stationKey, d.no));
+}
 
 /* ================= เอกสาร Masterlist ต่อ Record — ผูกกับ Supabase doc_evidence ================= */
 function isSheetLike(fmt){ const f=(fmt||'').toLowerCase(); return f.includes('google') || f.includes('excel') || f.includes('ecertify'); }
@@ -615,15 +637,15 @@ async function saveDocLink(recordType, recordId, stationKey, docNo){
   }catch(e){ alert('บันทึกลิงก์ไม่สำเร็จ'); }
 }
 async function refreshDocSummary(stationKey, recordType, recordId){
-  const docs = STATION_DOCS[stationKey]||[];
+  const docs = await visibleDocsFor(stationKey);
   const evMap = await fetchEvidenceMap(recordType, recordId);
   const done = docs.filter(d=>evMap[d.no] && evMap[d.no].link).length;
   const el = document.getElementById(`docsum-${recordType}-${recordId}`);
   if(el) el.textContent = `เอกสาร Masterlist (${done}/${docs.length} แนบแล้ว)`;
 }
 async function docDetailsHtml(stationKey, recordType, recordId){
-  const docs = STATION_DOCS[stationKey]||[];
-  if(docs.length===0) return `<div class="empty-state" style="padding:14px;">ไม่มีรายการเอกสารของ Station นี้ใน Masterlist</div>`;
+  const docs = await visibleDocsFor(stationKey);
+  if(docs.length===0) return `<div class="empty-state" style="padding:14px;">ไม่มีรายการเอกสารของ Station นี้ใน Masterlist${session.role==='AUDITOR'?' (หรือทั้งหมดถูกซ่อนจากมุมมอง Auditor)':''}</div>`;
   const evMap = await fetchEvidenceMap(recordType, recordId);
   const done = docs.filter(d=>evMap[d.no] && evMap[d.no].link).length;
   const items = docs.map(d=>docItemHtml(stationKey, recordType, recordId, d, evMap[d.no])).join('');
@@ -645,7 +667,7 @@ function renderSidebar(){
   h+=navGroup('บรรจุ / จัดเก็บ / จัดส่ง', FINAL_STATIONS.map(s=>({key:s.key,name:s.name,dot:s.ccpNote?'ccp':''})));
   h+=navGroup('อ้างอิง', [{key:'farmlookup',name:'ตาราง วันที่+Sub Lot → ฟาร์ม',dot:'util'},{key:'farm',name:'ฟาร์มเลี้ยงไก่ (เฟส 2)',dot:'phase2'}]);
   if(isAdmin()){
-    h+=navGroup('Admin', [{key:'employees',name:'จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'Audit Log',dot:'admin'}]);
+    h+=navGroup('Admin', [{key:'employees',name:'จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'Audit Log',dot:'admin'},{key:'docvisibility',name:'ซ่อนเอกสารจาก Auditor',dot:'admin'}]);
   }
   document.getElementById('navContainer').innerHTML=h;
 }
@@ -655,7 +677,7 @@ function navGroup(label, items){
   return h;
 }
 function navigateTo(key){
-  if(key==='employees' || key==='auditlog'){
+  if(key==='employees' || key==='auditlog' || key==='docvisibility'){
     if(!isAdmin()){ alert('เมนูนี้สำหรับ Admin เท่านั้น'); return; }
   }
   currentPage=key; renderSidebar();
@@ -669,6 +691,7 @@ function navigateTo(key){
   else if(key==='farm') renderPhase2();
   else if(key==='employees') renderEmployeesPage();
   else if(key==='auditlog') renderAuditLogPage();
+  else if(key==='docvisibility') renderDocVisibilityPage();
   else if(FINAL_MAP[key]) renderFinalStationPage(key);
 }
 function render(){ navigateTo(currentPage); }
@@ -1429,7 +1452,7 @@ async function auditorStats(){
   const allRecs = [...recs.map(r=>({type:'attach', id:r.id, station:r.station})), ...fin.map(r=>({type:'final', id:r.id, station:r.station}))];
   let totalDocSlots=0, doneDocSlots=0;
   await Promise.all(allRecs.map(async r=>{
-    const docs = STATION_DOCS[r.station]||[];
+    const docs = await visibleDocsFor(r.station);
     totalDocSlots += docs.length;
     const evMap = await fetchEvidenceMap(r.type, r.id);
     doneDocSlots += docs.filter(d=>evMap[d.no] && evMap[d.no].link).length;
@@ -1554,6 +1577,49 @@ async function renderAuditLogPage(){
     <div class="page-desc">บันทึกทุก action ในระบบ (ล่าสุด 300 รายการ) — เมนูนี้เห็นเฉพาะ Admin เท่านั้น</div>
     <div class="card"><table><thead><tr><th>เวลา</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>Action</th><th>Entity</th></tr></thead><tbody>${rows}</tbody></table></div>
   `;
+}
+
+/* ================= Admin: ซ่อนเอกสารจากมุมมอง Auditor ================= */
+const ALL_STATION_KEYS_FOR_DOCS = ['farm', ...ATTACH_STATIONS.map(s=>s.key), ...FINAL_STATIONS.map(s=>s.key)];
+const STATION_LABELS_FOR_DOCS = Object.assign(
+  {farm:'ฟาร์มเลี้ยงไก่ (เฟส 2)'},
+  Object.fromEntries(ATTACH_STATIONS.map(s=>[s.key,s.name])),
+  Object.fromEntries(FINAL_STATIONS.map(s=>[s.key,s.name]))
+);
+async function renderDocVisibilityPage(){
+  setLoading();
+  let hiddenMap;
+  try{ hiddenMap = await loadDocVisibility(true); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+
+  const sections = ALL_STATION_KEYS_FOR_DOCS.map(stationKey=>{
+    const docs = STATION_DOCS[stationKey]||[];
+    if(docs.length===0) return '';
+    const hiddenCount = docs.filter(d=>hiddenMap[stationKey+'|'+d.no]).length;
+    const rows = docs.map(d=>{
+      const hidden = !!hiddenMap[stationKey+'|'+d.no];
+      return `<label class="doc-item" style="cursor:pointer;">
+        <input type="checkbox" ${hidden?'checked':''} onchange="toggleDocVisibility('${stationKey}','${d.no}',this.checked)">
+        <span><span class="doc-name">#${d.no} ${d.name}</span><span class="doc-meta">${docMetaLine(d)}</span></span>
+      </label>`;
+    }).join('');
+    return `<details class="station-acc">
+      <summary>${STATION_LABELS_FOR_DOCS[stationKey]||stationKey}<span class="acc-count">${hiddenCount>0?`${hiddenCount} ซ่อนอยู่ / `:''}${docs.length} เอกสาร</span></summary>
+      <div class="acc-body"><div class="doclist" style="max-height:none;">${rows}</div></div>
+    </details>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">Admin</div>
+    <div class="page-title">ซ่อนเอกสารจากมุมมอง Auditor</div>
+    <div class="page-desc">ติ๊กเอกสารที่ไม่ต้องการให้ Auditor เห็น (เช่น เอกสารภายในที่ไม่เกี่ยวกับการตรวจสอบภายนอก) — <b>ไม่กระทบ QC/QA</b> ยังเห็นและกรอกเอกสารครบทุกรายการเหมือนเดิม กระทบเฉพาะสิ่งที่ผู้ใช้บทบาท Auditor มองเห็นเท่านั้น</div>
+    ${sections}
+  `;
+}
+async function toggleDocVisibility(stationKey, docNo, hidden){
+  try{
+    await apiSetDocVisibility(stationKey, docNo, hidden);
+    docVisibilityCache = null;
+  }catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
 </script>
 </body>
