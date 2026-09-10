@@ -1031,31 +1031,51 @@ async function addFarmMap(){
 }
 
 /* ================= TRACE QUERY ================= */
-function navigateAndTrace(code){ navigateTo('trace'); setTimeout(()=>{ document.getElementById('traceInput').value=code; runTrace(); }, 0); }
+function navigateAndTrace(code){ navigateTo('trace'); setTimeout(()=>{ setTraceMode('backward'); setTimeout(()=>{ document.getElementById('traceInput').value=code; runTrace(); }, 50); }, 0); }
+let traceMode = 'backward';
 async function renderTrace(){
-  setLoading();
-  let prod, fgs;
-  try{ [prod, fgs] = await Promise.all([apiListProdLots(), apiListFgLots()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
-  const options = prod.map(p=>`<option value="${p.code}">`).join('') + prod.map(p=>`<option value="${p.simple_code}">`).join('') + fgs.map(f=>`<option value="${f.code}">`).join('');
   document.getElementById('mainContent').innerHTML=`
     <div class="page-eyebrow">Genealogy</div>
     <div class="page-title">Trace Query</div>
-    <div class="page-desc">จุดเริ่ม Trace ที่แนะนำ: เริ่มค้นหาจาก <b>ลูกค้า/เลขที่ใบส่งของ</b> ก่อน แล้วไล่ย้อนกลับผ่านทุกกระบวนการจนถึงฟาร์ม อาหารสัตว์ ฝูงพ่อแม่พันธุ์ และโรงฟักไข่</div>
+    <div class="page-desc"><b>Forward</b> — เริ่มจากไก่เป็น (Production Lot) ไล่ไปดูสินค้าทั้งหมดที่ผลิตได้ ทั้ง Main Product และ Special Product (IVQF) &nbsp;|&nbsp; <b>Backward</b> — เริ่มจาก Product ไล่ย้อนกลับไปหาวัตถุดิบในแต่ละพาร์ท</div>
+    <div style="display:flex;gap:10px;margin-bottom:20px;">
+      <button class="btn" id="modeFwdBtn" onclick="setTraceMode('forward')">▶ Forward — จากไก่เป็น ไปหาสินค้า</button>
+      <button class="btn btn-ghost" id="modeBwdBtn" onclick="setTraceMode('backward')">◀ Backward — จาก Product ไปหาวัตถุดิบ</button>
+    </div>
+    <div id="modePanel"></div>
+  `;
+  setTraceMode(traceMode);
+}
+function setTraceMode(mode){
+  traceMode = mode;
+  document.getElementById('modeFwdBtn').className = mode==='forward' ? 'btn' : 'btn btn-ghost';
+  document.getElementById('modeBwdBtn').className = mode==='backward' ? 'btn' : 'btn btn-ghost';
+  if(mode==='forward') renderTraceForwardMode();
+  else renderTraceBackwardMode();
+}
 
+/* ---------- Backward mode (เริ่มจาก Product — ตอนนี้ใช้ใบส่งของ/Lot ไปก่อนจนกว่าจะมี Product Master List) ---------- */
+async function renderTraceBackwardMode(){
+  const panel = document.getElementById('modePanel');
+  panel.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังโหลด...</div>`;
+  let prod, fgs;
+  try{ [prod, fgs] = await Promise.all([apiListProdLots(), apiListFgLots()]); }
+  catch(e){ panel.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
+  const options = prod.map(p=>`<option value="${p.code}">`).join('') + prod.map(p=>`<option value="${p.simple_code}">`).join('') + fgs.map(f=>`<option value="${f.code}">`).join('');
+  panel.innerHTML = `
+    <div class="warn-banner">Backward ต้องตั้งต้นจาก <b>Item สินค้า</b> ไล่ตามใบฟอร์มตู้ไปหาวัตถุดิบแต่ละพาร์ท — ตอนนี้รอข้อมูล Product Master List เพื่อทำจุดเริ่ม "เลือก Product" อยู่ ระหว่างนี้ใช้ค้นหาจากใบส่งของ/ลูกค้า หรือ Lot โดยตรงไปพลางก่อน</div>
     <div class="card">
-      <div class="card-title">1) เริ่มจากลูกค้า / ใบส่งของที่ส่งมอบแล้ว</div>
+      <div class="card-title">เริ่มจากลูกค้า / ใบส่งของที่ส่งมอบแล้ว</div>
       <div class="trace-search">
         <input type="text" id="shipSearch" placeholder="พิมพ์ชื่อลูกค้า หรือเลขที่ใบส่งของ">
         <button class="btn" onclick="searchShipments()">ค้นหาใบส่งของ</button>
       </div>
       <div id="shipResult"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">2) หรือค้นหาโดยตรงด้วย Lot DLD / LOT FG</div>
+      <div class="card-title">หรือค้นหาโดยตรงด้วย Lot DLD / LOT FG</div>
       <div class="trace-search">
-        <input type="text" id="traceInput" list="lotList" placeholder="เช่น 2569227 01 หรือ 2569078 0101">
+        <input type="text" id="traceInput" list="lotList" placeholder="เช่น 2569227 01 หรือ 2569078 99H">
         <datalist id="lotList">${options}</datalist>
         <button class="btn" onclick="runTrace()">ค้นหา</button>
       </div>
@@ -1063,6 +1083,68 @@ async function renderTrace(){
     <div id="traceResult"></div>`;
   searchShipments();
 }
+
+/* ---------- Forward mode (เริ่มจากไก่เป็น — Production Lot) ---------- */
+async function renderTraceForwardMode(){
+  const panel = document.getElementById('modePanel');
+  panel.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังโหลด...</div>`;
+  let prod;
+  try{ prod = await apiListProdLots(); }catch(e){ panel.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
+  prod = prod.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  const options = prod.map(p=>`<option value="${p.code}">${p.code} — ${p.lot_date} Sub Lot ${p.line}</option>`).join('');
+  panel.innerHTML = `
+    <div class="card">
+      <div class="card-title">เลือก Production Lot (ไก่เป็น) เพื่อดูสินค้าทั้งหมดที่ผลิตได้จาก Lot นี้</div>
+      <div class="trace-search">
+        <select id="fwdLotSelect" style="flex:1;">${options || '<option>ยังไม่มี Production Lot ในระบบ</option>'}</select>
+        <button class="btn" onclick="runForwardTrace()">ดูผัง Forward</button>
+      </div>
+    </div>
+    <div id="fwdResult"></div>`;
+  if(prod.length>0) runForwardTrace();
+}
+async function runForwardTrace(){
+  const code = document.getElementById('fwdLotSelect').value;
+  const resultEl = document.getElementById('fwdResult');
+  resultEl.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังไล่ผัง Forward...</div>`;
+  let prod, fgs;
+  try{ [prod, fgs] = await Promise.all([apiListProdLots(), apiListFgLots()]); }
+  catch(e){ resultEl.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
+  const prodLot = prod.find(p=>p.code===code);
+  if(!prodLot){ resultEl.innerHTML = `<div class="note-banner">ไม่พบ Lot นี้</div>`; return; }
+
+  const selfHtml = nodeHtmlGeneric(prodLot.code, `Production Lot (Lot DLD) · Lot day ${prodLot.simple_code} · ${prodLot.lot_date} Sub Lot ${prodLot.line}`, '', true, false);
+
+  let attach=[]; try{ attach = await apiListAttachRecords(code); }catch(e){}
+  attach.sort((a,b)=> ATTACH_STATIONS.findIndex(s=>s.key===a.station) - ATTACH_STATIONS.findIndex(s=>s.key===b.station));
+  const stationHtml = attach.map(r=>nodeHtmlGeneric(ATTACH_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForAttach(r), false, false)).join('') || `<div class="empty-state">ยังไม่มีข้อมูล Station ของ Lot นี้</div>`;
+
+  // Main Product: สินค้าที่ผลิตจาก Lot นี้ตรงๆ (Boxing/Cold Storage/ส่งมอบ ที่อ้างอิง Lot นี้)
+  let finalRecs=[]; try{ finalRecs = await apiListFinalRecords(null, code); }catch(e){}
+  const mainProductHtml = finalRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('') || `<div class="empty-state">ยังไม่มี Main Product ที่ผลิตจาก Lot นี้โดยตรง</div>`;
+
+  // Special Product: LOT FG (IVQF) ที่ใช้ Lot นี้เป็นวัตถุดิบ
+  const fgUsing = fgs.filter(f=>(f.rm_sources||[]).includes(code));
+  const specialParts = await Promise.all(fgUsing.map(async f=>{
+    let n = nodeHtmlGeneric(f.code, `LOT FG (IVQF) · Lot day ${f.simple_code||'-'} · Product Code ${(f.fields||{}).productCode||'-'} · คลิกดู Trace เต็ม`, '', false, true, f.code);
+    let finRecs=[]; try{ finRecs = await apiListFinalRecords(null, f.code); }catch(e){}
+    n += finRecs.map(r=>nodeHtmlGeneric(FINAL_MAP[r.station].name, `${new Date(r.created_at).toLocaleString('th-TH')}`, ccpBadgesForFinal(r), false, false)).join('');
+    return n;
+  }));
+  const specialProductHtml = specialParts.join('') || `<div class="empty-state">ยังไม่มี Special Product (IVQF) ที่ใช้ Lot นี้เป็นวัตถุดิบ</div>`;
+
+  resultEl.innerHTML = `
+    <div style="margin-bottom:16px;">${selfHtml}</div>
+    <div class="card">
+      <div class="card-title">ขั้นตอนการผลิตของ Lot นี้ (ทุก Station)</div>
+      ${stationHtml}
+    </div>
+    <div class="trace-cols">
+      <div class="trace-col"><h4>Main Product (สินค้าหลัก)</h4>${mainProductHtml}</div>
+      <div class="trace-col"><h4>Special Product (IVQF)</h4>${specialProductHtml}</div>
+    </div>`;
+}
+
 async function searchShipments(){
   const q=(document.getElementById('shipSearch').value||'').trim().toLowerCase();
   let shipments;
