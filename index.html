@@ -371,6 +371,7 @@ const ATTACH_STATIONS = [
   ]},
   {key:'cutting', name:'เลาะกระดูก', dept:'CUT', fields:[
     {id:'subLotNote', label:'หมายเหตุ SUB LOT ภายใน', type:'text'},
+    {id:'productCode', label:'Product Code (CUT-UP)', type:'text'},
   ]},
   {key:'specialcut', name:'ตัดแต่งพิเศษ + ปรุงรส', dept:'SC / QPT', fields:[
     {id:'productType', label:'ประเภทสินค้า', type:'select', options:['สดแช่เย็น','สดแช่แข็ง','Marinated แช่แข็ง']},
@@ -1135,22 +1136,29 @@ async function traceFromProductCode(productCode){
   const resultEl = document.getElementById('traceResult');
   resultEl.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังค้นหา Lot ที่ผลิต Product นี้...</div>`;
   resultEl.scrollIntoView({behavior:'smooth'});
-  let fgs, recs, prod;
+  let fgs, scRecs, cutRecs, prod;
   try{
-    [fgs, recs, prod] = await Promise.all([apiListFgLots(), apiListAttachRecords(null,'specialcut'), apiListProdLots()]);
+    [fgs, scRecs, cutRecs, prod] = await Promise.all([
+      apiListFgLots(), apiListAttachRecords(null,'specialcut'), apiListAttachRecords(null,'cutting'), apiListProdLots()
+    ]);
   }catch(e){ resultEl.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
 
   const matchedFg = fgs.filter(f=>(f.fields||{}).productCode===productCode);
-  const matchedSc = recs.filter(r=>(r.fields||{}).productCode===productCode);
+  const matchedSc = scRecs.filter(r=>(r.fields||{}).productCode===productCode);
+  const matchedCut = cutRecs.filter(r=>(r.fields||{}).productCode===productCode);
 
-  if(matchedFg.length===0 && matchedSc.length===0){
-    resultEl.innerHTML = `<div class="note-banner">ยังไม่มี Lot ที่บันทึก Product Code "${productCode}" ไว้ในระบบ (ต้องกรอกที่ Station "ตัดแต่งพิเศษ" หรือตอนสร้าง LOT FG ก่อน)</div>`;
+  if(matchedFg.length===0 && matchedSc.length===0 && matchedCut.length===0){
+    resultEl.innerHTML = `<div class="note-banner">ยังไม่มี Lot ที่บันทึก Product Code "${productCode}" ไว้ในระบบ (ต้องกรอกที่ Station "เลาะกระดูก" หรือ "ตัดแต่งพิเศษ" หรือตอนสร้าง LOT FG ก่อน)</div>`;
     return;
   }
 
-  let html = `<div class="note-banner">พบ ${matchedFg.length + matchedSc.length} Lot ที่ผลิต Product Code "${productCode}" — คลิกรายการเพื่อดู Trace เต็ม</div>`;
+  let html = `<div class="note-banner">พบ ${matchedFg.length + matchedSc.length + matchedCut.length} Lot ที่ผลิต Product Code "${productCode}" — คลิกรายการเพื่อดู Trace เต็ม</div>`;
   matchedFg.forEach(f=>{
     html += nodeHtmlGeneric(f.code, `LOT FG (IVQF) · ${f.lot_date} Sub Lot ${f.line} · คลิกดู Trace เต็ม`, '', false, true, f.code);
+  });
+  matchedCut.forEach(r=>{
+    const pl = prod.find(p=>p.code===r.prod_lot_code);
+    html += nodeHtmlGeneric(r.prod_lot_code, `Production Lot (เลาะกระดูก / CUT-UP) ${pl?`· ${pl.lot_date} Sub Lot ${pl.line}`:''} · คลิกดู Trace เต็ม`, '', false, false, r.prod_lot_code);
   });
   matchedSc.forEach(r=>{
     const pl = prod.find(p=>p.code===r.prod_lot_code);
