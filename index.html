@@ -535,6 +535,7 @@ async function apiSetEmployeeActive(id,active){ return await rpc('rpc_set_employ
 async function apiGetAuditLog(limit,code,action){ return await rpc('rpc_get_audit_log', {p_session_token:session.token, p_limit:limit||300, p_employee_code:code||null, p_action:action||null}); }
 async function apiSetDocVisibility(station, docNo, hidden){ return await rpc('rpc_set_doc_visibility', {p_session_token:session.token, p_station:station, p_doc_no:docNo, p_hidden:hidden}); }
 async function apiListDocVisibility(){ return await rpc('rpc_list_doc_visibility', {p_session_token:session.token}); }
+async function apiListProducts(){ return await rpc('rpc_list_products', {p_session_token:session.token}); }
 
 /* ================= ซ่อนเอกสารบางรายการจากมุมมอง Auditor (Admin ตั้งค่า) ================= */
 let docVisibilityCache = null;
@@ -1081,7 +1082,7 @@ function setTraceMode(mode){
   else renderTraceBackwardMode();
 }
 
-/* ---------- Backward mode (เริ่มจาก Product — ตอนนี้ใช้ใบส่งของ/Lot ไปก่อนจนกว่าจะมี Product Master List) ---------- */
+/* ---------- Backward mode (เริ่มจาก Product Item) ---------- */
 async function renderTraceBackwardMode(){
   const panel = document.getElementById('modePanel');
   panel.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังโหลด...</div>`;
@@ -1090,9 +1091,16 @@ async function renderTraceBackwardMode(){
   catch(e){ panel.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
   const options = prod.map(p=>`<option value="${p.code}">`).join('') + prod.map(p=>`<option value="${p.simple_code}">`).join('') + fgs.map(f=>`<option value="${f.code}">`).join('');
   panel.innerHTML = `
-    <div class="warn-banner">Backward ต้องตั้งต้นจาก <b>Item สินค้า</b> ไล่ตามใบฟอร์มตู้ไปหาวัตถุดิบแต่ละพาร์ท — ตอนนี้รอข้อมูล Product Master List เพื่อทำจุดเริ่ม "เลือก Product" อยู่ ระหว่างนี้ใช้ค้นหาจากใบส่งของ/ลูกค้า หรือ Lot โดยตรงไปพลางก่อน</div>
     <div class="card">
-      <div class="card-title">เริ่มจากลูกค้า / ใบส่งของที่ส่งมอบแล้ว</div>
+      <div class="card-title">1) เริ่มจาก Item สินค้า (Product Master List)</div>
+      <div class="trace-search">
+        <input type="text" id="productSearch" placeholder="พิมพ์ Product Code หรือชื่อสินค้า เช่น 111117302 หรือ BLK">
+        <button class="btn" onclick="searchProducts()">ค้นหา Product</button>
+      </div>
+      <div id="productResult"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">2) หรือเริ่มจากลูกค้า / ใบส่งของที่ส่งมอบแล้ว</div>
       <div class="trace-search">
         <input type="text" id="shipSearch" placeholder="พิมพ์ชื่อลูกค้า หรือเลขที่ใบส่งของ">
         <button class="btn" onclick="searchShipments()">ค้นหาใบส่งของ</button>
@@ -1100,7 +1108,7 @@ async function renderTraceBackwardMode(){
       <div id="shipResult"></div>
     </div>
     <div class="card">
-      <div class="card-title">หรือค้นหาโดยตรงด้วย Lot DLD / LOT FG</div>
+      <div class="card-title">3) หรือค้นหาโดยตรงด้วย Lot DLD / LOT FG</div>
       <div class="trace-search">
         <input type="text" id="traceInput" list="lotList" placeholder="เช่น 2569227 01 หรือ 2569078 99H">
         <datalist id="lotList">${options}</datalist>
@@ -1110,6 +1118,47 @@ async function renderTraceBackwardMode(){
     <div id="traceResult"></div>`;
   searchShipments();
 }
+async function searchProducts(){
+  const q=(document.getElementById('productSearch').value||'').trim().toLowerCase();
+  let products; try{ products = await apiListProducts(); }catch(e){ return; }
+  const matched = q ? products.filter(p=>(p.product_code||'').toLowerCase().includes(q) || (p.part||'').toLowerCase().includes(q)) : products.slice(0,15);
+  const box=document.getElementById('productResult');
+  if(matched.length===0){ box.innerHTML=`<div class="empty-state">ไม่พบ Product ที่ตรงกับ "${q}"</div>`; return; }
+  box.innerHTML = matched.map(p=>`
+    <div class="trace-node" style="margin-top:8px;">
+      <div class="st">${p.station_note||'-'} · ${p.product_type||'-'} · ${p.weight_per_bag||'-'}</div>
+      <div class="code">${p.product_code} — ${p.part||'-'}</div>
+      <div style="margin-top:6px;"><button class="btn btn-sm" onclick="traceFromProductCode('${p.product_code}')">ไล่ผังย้อนกลับจาก Product นี้</button></div>
+    </div>`).join('');
+}
+async function traceFromProductCode(productCode){
+  const resultEl = document.getElementById('traceResult');
+  resultEl.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังค้นหา Lot ที่ผลิต Product นี้...</div>`;
+  resultEl.scrollIntoView({behavior:'smooth'});
+  let fgs, recs, prod;
+  try{
+    [fgs, recs, prod] = await Promise.all([apiListFgLots(), apiListAttachRecords(null,'specialcut'), apiListProdLots()]);
+  }catch(e){ resultEl.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
+
+  const matchedFg = fgs.filter(f=>(f.fields||{}).productCode===productCode);
+  const matchedSc = recs.filter(r=>(r.fields||{}).productCode===productCode);
+
+  if(matchedFg.length===0 && matchedSc.length===0){
+    resultEl.innerHTML = `<div class="note-banner">ยังไม่มี Lot ที่บันทึก Product Code "${productCode}" ไว้ในระบบ (ต้องกรอกที่ Station "ตัดแต่งพิเศษ" หรือตอนสร้าง LOT FG ก่อน)</div>`;
+    return;
+  }
+
+  let html = `<div class="note-banner">พบ ${matchedFg.length + matchedSc.length} Lot ที่ผลิต Product Code "${productCode}" — คลิกรายการเพื่อดู Trace เต็ม</div>`;
+  matchedFg.forEach(f=>{
+    html += nodeHtmlGeneric(f.code, `LOT FG (IVQF) · ${f.lot_date} Sub Lot ${f.line} · คลิกดู Trace เต็ม`, '', false, true, f.code);
+  });
+  matchedSc.forEach(r=>{
+    const pl = prod.find(p=>p.code===r.prod_lot_code);
+    html += nodeHtmlGeneric(r.prod_lot_code, `Production Lot (ตัดแต่งพิเศษ) ${pl?`· ${pl.lot_date} Sub Lot ${pl.line}`:''} · คลิกดู Trace เต็ม`, '', false, false, r.prod_lot_code);
+  });
+  resultEl.innerHTML = html;
+}
+
 
 /* ---------- Forward mode (เริ่มจากไก่เป็น — Production Lot) ---------- */
 async function renderTraceForwardMode(){
