@@ -890,9 +890,20 @@ async function renderTrace(){
   document.getElementById('mainContent').innerHTML = `
     <div class="page-eyebrow">Genealogy</div>
     <div class="page-title">Trace Query</div>
-    <div class="page-desc">ค้นหา Trace Unit จาก Lot / Sublot / Product Code แล้วไล่ดู Backward (ย้อนกลับ) และ Forward (ไปข้างหน้า) แบบ Recursive เต็มสาย — คลิกแต่ละ Node เพื่อดู Event และเอกสารที่เกี่ยวข้อง</div>
+    <div class="page-desc">ไล่ดู Backward (ย้อนกลับ) และ Forward (ไปข้างหน้า) แบบ Recursive เต็มสาย — คลิกแต่ละ Node เพื่อดู Event และเอกสารที่เกี่ยวข้อง</div>
+
     <div class="card">
-      <div class="card-title">ค้นหา Trace Unit</div>
+      <div class="card-title">1) เริ่มจาก Item สินค้า (ไล่ Backward จากจุดที่ Load/ส่งออกจริง)</div>
+      <div class="page-desc" style="margin-bottom:12px;">ค้นหาด้วย Product Code — ระบบจะไล่ Forward จากทุกจุดที่พบ Product Code นี้ไปจนสุดสาย แล้วให้เริ่ม Backward จาก "จุดปลายทางล่าสุด" (เช่น การส่งมอบ/โหลดสินค้า) ไม่ใช่จุดกลางทางที่บังเอิญเจอ Product Code นี้ติดมา</div>
+      <div class="trace-search">
+        <input type="text" id="tqProductOnly" placeholder="Product Code เช่น 111117302">
+        <button class="btn" onclick="searchTerminalByProduct()">ค้นหาจุดปลายทาง</button>
+      </div>
+      <div id="tqTerminalResult"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2) หรือค้นหา Trace Unit ทั่วไป (Lot / Sublot / Product Code — ดูจุดไหนก็ได้ในสาย ไม่จำกัดจุดปลายทาง)</div>
       <div class="trace-search">
         <input type="text" id="tqLot" placeholder="Lot">
         <input type="text" id="tqSublot" placeholder="Sublot" style="max-width:120px;">
@@ -903,6 +914,21 @@ async function renderTrace(){
     </div>
     <div id="tqTraceResult"></div>
   `;
+}
+async function searchTerminalByProduct(){
+  const productCode = document.getElementById('tqProductOnly').value.trim();
+  const box = document.getElementById('tqTerminalResult');
+  if(!productCode){ box.innerHTML = `<div class="empty-state">กรุณากรอก Product Code</div>`; return; }
+  box.innerHTML = `<div class="empty-state" style="padding:14px;">กำลังไล่หาจุดปลายทาง...</div>`;
+  try{
+    const rows = await rpc('rpc_find_terminal_trace_by_product', {p_session_token:session.token, p_product_code:productCode});
+    if(rows.length===0){ box.innerHTML = `<div class="empty-state">ไม่พบ Trace Unit ที่มี Product Code นี้ในระบบ</div>`; return; }
+    box.innerHTML = rows.map(r=>`
+      <div class="trace-node fg" style="cursor:pointer;" onclick="runTraceQuery('${r.trace_id}')">
+        <div class="st">จุดปลายทางล่าสุด · ${r.trace_type} · ${r.production_date||'-'}</div>
+        <div class="code">Lot ${r.lot||'-'} / Sublot ${r.sublot||'-'} · Product ${r.product_code||'-'}</div>
+      </div>`).join('');
+  }catch(e){ box.innerHTML = `<div class="err-banner">ค้นหาไม่สำเร็จ: ${e.message||'เกิดข้อผิดพลาด'}</div>`; }
 }
 async function searchTraceUnitsForQuery(){
   const lot=document.getElementById('tqLot').value.trim();
