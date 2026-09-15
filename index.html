@@ -428,7 +428,7 @@ function docGroupFor(processCode){ return PROCESS_TO_DOCGROUP[processCode] || nu
 async function apiListProcessMaster(){ return await rpc('rpc_list_process_master', {p_session_token:session.token}); }
 async function apiUpsertProcessMaster(code,name,station,active){ return await rpc('rpc_upsert_process_master', {p_session_token:session.token, p_process_code:code, p_process_name:name, p_station:station, p_active:active}); }
 async function apiListProductMaster(){ return await rpc('rpc_list_product_master', {p_session_token:session.token}); }
-async function apiUpsertProductMaster(code,name,part,unit,active){ return await rpc('rpc_upsert_product_master', {p_session_token:session.token, p_product_code:code, p_product_name:name, p_part:part, p_unit:unit, p_active:active}); }
+async function apiUpsertProductMaster(code,name,part,unit,productType,active){ return await rpc('rpc_upsert_product_master', {p_session_token:session.token, p_product_code:code, p_product_name:name, p_part:part, p_unit:unit, p_product_type:productType, p_active:active}); }
 async function apiListFarmHouseFlock(){ return await rpc('rpc_list_farm_house_flock', {p_session_token:session.token}); }
 async function apiUpsertFarmHouseFlock(farmId,houseId,flockId,flockDate,sublot,feedLot,breederFlock,hatcheryBatch){
   return await rpc('rpc_upsert_farm_house_flock', {p_session_token:session.token, p_farm_id:farmId, p_house_id:houseId, p_flock_id:flockId, p_flock_date:flockDate, p_sublot:sublot, p_feed_lot:feedLot||null, p_breeder_flock:breederFlock||null, p_hatchery_batch:hatcheryBatch||null});
@@ -1007,11 +1007,17 @@ async function renderProductMasterPage(){
   let products;
   try{ products = await apiListProductMaster(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
   products = products.slice().sort((a,b)=>a.product_code.localeCompare(b.product_code));
+  const typeBadge = (t)=>{
+    if(t==='Freeze') return '<span class="badge badge-ccp">Freeze</span>';
+    if(t==='Chill') return '<span class="badge badge-pass">Chill</span>';
+    return '<span class="badge badge-fail">ยังไม่ระบุ</span>';
+  };
   const rows = products.map(p=>`<tr>
     <td class="lotcode">${p.product_code}</td><td>${p.product_name||'-'}</td><td>${p.part||'-'}</td><td>${p.unit||'-'}</td>
+    <td>${typeBadge(p.product_type)}</td>
     <td>${p.active?'<span class="badge badge-pass">Active</span>':'<span class="badge badge-fail">Inactive</span>'}</td>
-    <td>${canWrite()?`<button class="btn btn-ghost btn-sm" onclick="editProductMaster('${p.product_code}',${JSON.stringify(p.product_name||'')},${JSON.stringify(p.part||'')},${JSON.stringify(p.unit||'')},${p.active})">แก้ไข</button>`:''}</td>
-  </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มี Product Master</div></td></tr>`;
+    <td>${canWrite()?`<button class="btn btn-ghost btn-sm" onclick="editProductMaster('${p.product_code}',${JSON.stringify(p.product_name||'')},${JSON.stringify(p.part||'')},${JSON.stringify(p.unit||'')},${JSON.stringify(p.product_type||'')},${p.active})">แก้ไข</button>`:''}</td>
+  </tr>`).join('') || `<tr><td colspan="7"><div class="empty-state">ยังไม่มี Product Master</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
@@ -1021,6 +1027,13 @@ async function renderProductMasterPage(){
         <div class="field"><label>Product Name</label><input type="text" id="pmName"></div>
         <div class="field"><label>Part</label><input type="text" id="pmPart" placeholder="BB / BL / FILLET / WING / CCM"></div>
         <div class="field"><label>Unit</label><input type="text" id="pmUnit"></div>
+        <div class="field"><label>ประเภทสินค้า (Frozen / Chilled)</label>
+          <select id="pmProductType">
+            <option value="">-- ยังไม่ระบุ --</option>
+            <option value="Chill">Chill (แช่เย็น)</option>
+            <option value="Freeze">Freeze (แช่แข็ง)</option>
+          </select>
+        </div>
       </div>
       <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13.5px;"><input type="checkbox" id="pmActive" checked> Active</label>
       <button class="btn" style="margin-top:10px;" onclick="saveProductMaster()">บันทึก</button>
@@ -1030,16 +1043,17 @@ async function renderProductMasterPage(){
   document.getElementById('mainContent').innerHTML = `
     <div class="page-eyebrow">Master Data</div>
     <div class="page-title">Product Master</div>
-    <div class="page-desc">รายการ Product Code ทั้งหมด — ใช้ Validate ตอนบันทึก Event (TR-11) ป้องกัน Product Code ผิด/ไม่มีอยู่จริง</div>
+    <div class="page-desc">รายการ Product Code ทั้งหมด — ใช้ Validate ตอนบันทึก Event (TR-11) ป้องกัน Product Code ผิด/ไม่มีอยู่จริง พร้อมระบุว่าเป็นสินค้า Chill หรือ Freeze</div>
     ${formHtml}
     <div class="card"><div class="card-title">Product ทั้งหมด (${products.length})</div>
-      <table><thead><tr><th>Product Code</th><th>ชื่อ</th><th>Part</th><th>Unit</th><th>สถานะ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th>Product Code</th><th>ชื่อ</th><th>Part</th><th>Unit</th><th>ประเภท</th><th>สถานะ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
 }
-function editProductMaster(code,name,part,unit,active){
+function editProductMaster(code,name,part,unit,productType,active){
   document.getElementById('pmFormTitle').textContent = `แก้ไข Product: ${code}`;
   document.getElementById('pmCode').value = code; document.getElementById('pmCode').disabled = true;
   document.getElementById('pmName').value = name; document.getElementById('pmPart').value = part; document.getElementById('pmUnit').value = unit;
+  document.getElementById('pmProductType').value = productType || '';
   document.getElementById('pmActive').checked = active;
   window.scrollTo(0,0);
 }
@@ -1049,9 +1063,10 @@ async function saveProductMaster(){
   const name = document.getElementById('pmName').value.trim();
   const part = document.getElementById('pmPart').value.trim();
   const unit = document.getElementById('pmUnit').value.trim();
+  const productType = document.getElementById('pmProductType').value;
   const active = document.getElementById('pmActive').checked;
   if(!code){ alert('กรุณากรอก Product Code'); return; }
-  try{ await apiUpsertProductMaster(code,name,part,unit,active); renderProductMasterPage(); }
+  try{ await apiUpsertProductMaster(code,name,part,unit,productType||null,active); renderProductMasterPage(); }
   catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
 
