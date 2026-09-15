@@ -944,13 +944,18 @@ async function runTraceQuery(traceId){
   `;
 }
 function traceNodeHtml(n, isSelf){
-  return `<div class="trace-node ${isSelf?'self':''}" onclick="expandTraceNode('${n.trace_id}', this)" style="cursor:pointer;">
+  return `<div class="trace-node ${isSelf?'self':''}" onclick="handleTraceNodeClick(event,'${n.trace_id}')" style="cursor:pointer;">
     <div class="st">${n.trace_type} ${n.relation_type?('· '+n.relation_type):''} · ${n.production_date||'-'}</div>
     <div class="code">Lot ${n.lot||'-'} / Sublot ${n.sublot||'-'} ${n.product_code?('· '+n.product_code):''}</div>
-    <div class="expandArea" id="expand-${n.trace_id}"></div>
+    <div class="expandArea" id="expand-${n.trace_id}" onclick="event.stopPropagation()"></div>
   </div>`;
 }
-async function expandTraceNode(traceId, el){
+function handleTraceNodeClick(event, traceId){
+  // ถ้าคลิกเกิดขึ้นข้างในส่วนที่ขยายแล้ว (เช่น summary เอกสาร, ลิงก์, ช่องกรอก) อย่า toggle ปิดทั้งก้อน
+  if(event.target.closest('.expandArea')) return;
+  expandTraceNode(traceId);
+}
+async function expandTraceNode(traceId){
   const area = document.getElementById('expand-'+traceId);
   if(!area) return;
   if(area.innerHTML){ area.innerHTML=''; return; }
