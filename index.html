@@ -386,13 +386,13 @@ async function apiCreateHatchery(date,breed,batchNo,qty,rate,farmDest,status){ r
 
 // LB
 async function apiListLB(lot,sublot){ return await rpc('rpc_list_lb', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
-async function apiCreateLB(date,farmId,house,flock,sublot,qty,avgWeight,doa,note){
-  return await rpc('rpc_create_lb', {p_session_token:session.token, p_date:date, p_farm_id:farmId, p_house:house, p_flock:flock, p_sublot:sublot, p_received_qty:qty, p_avg_weight:avgWeight, p_doa:doa, p_note:note});
+async function apiCreateLB(date,farmId,house,flock,sublot,qty,avgWeight,dead,headPct,headWeight,featherPct,featherWeight,note){
+  return await rpc('rpc_create_lb', {p_session_token:session.token, p_date:date, p_farm_id:farmId, p_house:house, p_flock:flock, p_sublot:sublot, p_received_qty:qty, p_avg_weight:avgWeight, p_dead_qty:dead, p_head_pct:headPct, p_head_weight:headWeight, p_feather_pct:featherPct, p_feather_weight:featherWeight, p_note:note});
 }
 // EVI
 async function apiListEVI(lot,sublot){ return await rpc('rpc_list_evi', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
-async function apiCreateEVI(lbLot,sublot,doa,condemn,partial,ccp1,note,byproducts){
-  return await rpc('rpc_create_evi', {p_session_token:session.token, p_lb_lot:lbLot, p_sublot:sublot, p_doa:doa, p_condemn:condemn, p_partial:partial, p_ccp1:ccp1, p_note:note, p_byproducts:byproducts});
+async function apiCreateEVI(lbLot,sublot,enteringSlaughter,condemn,partial,enteringChiller,ccp1,note,intestinePct,intestineWeight,byproducts){
+  return await rpc('rpc_create_evi', {p_session_token:session.token, p_lb_lot:lbLot, p_sublot:sublot, p_entering_slaughter:enteringSlaughter, p_condemn:condemn, p_partial:partial, p_entering_chiller:enteringChiller, p_ccp1:ccp1, p_note:note, p_intestine_pct:intestinePct, p_intestine_weight:intestineWeight, p_byproducts:byproducts});
 }
 async function apiListEVIByproducts(eviId){ return await rpc('rpc_list_evi_byproducts', {p_session_token:session.token, p_evi_record_id:eviId}); }
 
@@ -653,11 +653,11 @@ async function submitHatchery(){
 }
 
 /* ================= LB (รับไก่เป็น) ================= */
-async function renderLBPage(){
+async function renderLBPage(searchLot){
   setLoading();
   let rows, farms;
-  try{ [rows, farms] = await Promise.all([apiListLB(), apiListFarmMaster()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3 + patch3b แล้ว'); return; }
+  try{ [rows, farms] = await Promise.all([apiListLB(searchLot||null), apiListFarmMaster()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3 + patch3b + patch3c แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
   const farmOptions = farms.map(f=>`<option value="${f.farm_id}">${f.farm_id} — ${f.farm_name}</option>`).join('');
 
@@ -665,7 +665,8 @@ async function renderLBPage(){
     <td>${r.received_date}</td><td class="lotcode">${r.lb_lot_code}</td><td>${r.sublot}</td>
     <td>${r.farm_id||'-'}</td><td>${r.house||'-'}</td><td>${r.flock_batch||'-'}</td>
     <td>${r.received_qty}</td><td>${r.avg_weight_kg||'-'}</td><td>${r.dead_on_arrival_qty||0}</td>
-  </tr>`).join('') || `<tr><td colspan="9"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+    <td>${r.head_weight_kg??'-'} (${r.head_pct??6}%)</td><td>${r.feather_weight_kg??'-'} (${r.feather_pct??4}%)</td>
+  </tr>`).join('') || `<tr><td colspan="11"><div class="empty-state">${searchLot?`ไม่พบ Lot ที่ตรงกับ "${searchLot}"`:'ยังไม่มีข้อมูล'}</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
@@ -676,11 +677,20 @@ async function renderLBPage(){
         <div class="field"><label>เล้า (House)</label><input type="text" id="lbHouse"></div>
         <div class="field"><label>Flock / รุ่นการเลี้ยง</label><input type="text" id="lbFlock"></div>
         <div class="field"><label>Sub Lot</label><input type="text" id="lbSublot" placeholder="เช่น 01, 99H"></div>
-        <div class="field"><label>จำนวนรับ (ตัว)</label><input type="number" id="lbQty"></div>
-        <div class="field"><label>น้ำหนักเฉลี่ย (kg)</label><input type="number" step="0.01" id="lbAvgWeight"></div>
-        <div class="field"><label>จำนวนตัวไก่ตาย (DOA)</label><input type="number" id="lbDoa" value="0"></div>
+        <div class="field"><label>จำนวนรับ (ตัว)</label><input type="number" id="lbQty" oninput="recalcLBByproducts()"></div>
+        <div class="field"><label>น้ำหนักเฉลี่ย (kg/ตัว)</label><input type="number" step="0.01" id="lbAvgWeight" oninput="recalcLBByproducts()"></div>
+        <div class="field"><label>จำนวนตัวไก่ตายทั้งหมด</label><input type="number" id="lbDoa" value="0"></div>
       </div>
-      <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="lbNote"></div>
+      <div class="note-banner" style="margin-top:10px;">น้ำหนักไก่เป็นรวม (คำนวณอัตโนมัติ = จำนวนรับ × น้ำหนักเฉลี่ย): <b id="lbTotalLiveWeight">0</b> kg</div>
+      <div class="card-title" style="margin-top:14px;font-size:13px;">ผลผลิตประมาณการ (คำนวณจาก % ของน้ำหนักไก่เป็น — แก้ไขได้)</div>
+      <div class="form-grid">
+        <div class="field"><label>หัวไก่ — % ของ นน. ไก่เป็น (ค่าตั้งต้น 6%)</label><input type="number" id="lbHeadPct" value="6" step="0.1" oninput="recalcLBByproducts()"></div>
+        <div class="field"><label>หัวไก่ — น้ำหนัก (kg)</label><input type="number" id="lbHeadWeight" class="calc-field" step="0.1"></div>
+        <div class="field"><label>ขนไก่ — % ของ นน. ไก่เป็น (ค่าตั้งต้น 4%)</label><input type="number" id="lbFeatherPct" value="4" step="0.1" oninput="recalcLBByproducts()"></div>
+        <div class="field"><label>ขนไก่ — น้ำหนัก (kg)</label><input type="number" id="lbFeatherWeight" class="calc-field" step="0.1"></div>
+      </div>
+      <div class="calc-note">ค่าเหล่านี้คำนวณอัตโนมัติจาก % ที่กำหนด แต่แก้ไขเองได้ถ้าชั่งจริงได้ค่าต่างไป</div>
+      <div class="field full" style="margin-top:10px;"><label>หมายเหตุ</label><input type="text" id="lbNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('lb', null, 'เอกสารรับไก่')}</div>
       <button class="btn" style="margin-top:12px;" onclick="submitLB()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
@@ -690,39 +700,65 @@ async function renderLBPage(){
     ${breadcrumbHtml('lb')}
     <div class="page-desc">บันทึกข้อมูลรับไก่เป็นจากฟาร์ม เป็นจุดเริ่มต้นของ Lot DLD (พ.ศ.+วันจูเลียน+Sub Lot)</div>
     ${formHtml}
-    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>LB Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เล้า</th><th>Flock</th><th>จำนวนรับ</th><th>นน.เฉลี่ย</th><th>DOA</th></tr></thead><tbody>${tableRows}</tbody></table>
+    <div class="card">
+      <div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <div class="trace-search" style="margin-bottom:12px;">
+        <input type="text" id="lbSearchLot" value="${searchLot||''}" placeholder="ค้นหา Lot เช่น 2569261 (เต็ม) หรือ 261 (วันจูเลียน — ขึ้นทุกปี)">
+        <button class="btn btn-sm" onclick="searchLB()">🔍 ค้นหา</button>
+        <button class="btn btn-ghost btn-sm" onclick="renderLBPage()">ล้างการค้นหา</button>
+      </div>
+      <table><thead><tr><th>วันที่</th><th>LB Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เล้า</th><th>Flock</th><th>จำนวนรับ</th><th>นน.เฉลี่ย</th><th>ตายทั้งหมด</th><th>หัวไก่</th><th>ขนไก่</th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'lb',null); });
+}
+function recalcLBByproducts(){
+  const qty = Number(document.getElementById('lbQty').value||0);
+  const avgWeight = Number(document.getElementById('lbAvgWeight').value||0);
+  const totalLiveWeight = qty * avgWeight;
+  document.getElementById('lbTotalLiveWeight').textContent = totalLiveWeight.toFixed(1);
+  const headPct = Number(document.getElementById('lbHeadPct').value||6);
+  const featherPct = Number(document.getElementById('lbFeatherPct').value||4);
+  document.getElementById('lbHeadWeight').value = (totalLiveWeight*headPct/100).toFixed(1);
+  document.getElementById('lbFeatherWeight').value = (totalLiveWeight*featherPct/100).toFixed(1);
+}
+async function searchLB(){
+  const lot = document.getElementById('lbSearchLot').value.trim();
+  renderLBPage(lot);
 }
 async function submitLB(){
   const date=document.getElementById('lbDate').value, farmId=document.getElementById('lbFarm').value;
   const house=document.getElementById('lbHouse').value.trim(), flock=document.getElementById('lbFlock').value.trim();
   const sublot=document.getElementById('lbSublot').value.trim(), qty=document.getElementById('lbQty').value;
-  const avgWeight=document.getElementById('lbAvgWeight').value, doa=document.getElementById('lbDoa').value;
+  const avgWeight=document.getElementById('lbAvgWeight').value, dead=document.getElementById('lbDoa').value;
+  const headPct=document.getElementById('lbHeadPct').value, headWeight=document.getElementById('lbHeadWeight').value;
+  const featherPct=document.getElementById('lbFeatherPct').value, featherWeight=document.getElementById('lbFeatherWeight').value;
   const note=document.getElementById('lbNote').value.trim();
   if(!date||!sublot||!qty){ alert('กรุณากรอกวันที่, Sub Lot และจำนวนรับให้ครบ'); return; }
-  try{ await apiCreateLB(date,farmId,house,flock,sublot,Number(qty),avgWeight?Number(avgWeight):null,doa?Number(doa):0,note); renderLBPage(); }
-  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+  try{
+    await apiCreateLB(date,farmId,house,flock,sublot,Number(qty),avgWeight?Number(avgWeight):null,dead?Number(dead):0,
+      headPct?Number(headPct):6, headWeight?Number(headWeight):null, featherPct?Number(featherPct):4, featherWeight?Number(featherWeight):null, note);
+    renderLBPage();
+  }catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
 
 /* ================= EVI (ล้วงเครื่องใน) ================= */
-const EVI_BYPRODUCT_DEFAULTS = ['ตับ','กึ๋น','หัวใจ','ไส้','ขา'];
+const EVI_BYPRODUCT_DEFAULTS = ['ตับ','กึ๋น','หัวใจ','ขา'];
 let eviByproductRows = [];
-async function renderEVIPage(){
+async function renderEVIPage(searchLot){
   setLoading();
   let rows;
-  try{ rows = await apiListEVI(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  try{ rows = await apiListEVI(searchLot||null); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3c แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
   eviByproductRows = EVI_BYPRODUCT_DEFAULTS.map(name=>({product_name:name, qty_kg:'', qty_pcs:'', note:''}));
   eviByproductRows.push({product_name:'อื่นๆ (ระบุ)', qty_kg:'', qty_pcs:'', note:''});
 
   const tableRows = rows.map(r=>`<tr>
     <td class="lotcode">${r.lb_lot_code}</td><td>${r.sublot}</td>
-    <td>${r.entering_slaughter_qty??'-'}</td><td>${r.doa_qty??0}</td><td>${r.condemn_qty??0}</td><td>${r.partial_qty??0}</td>
+    <td>${r.entering_slaughter_qty??'-'}</td><td>${r.condemn_qty??0}</td><td>${r.partial_qty??0}</td>
     <td><b>${r.entering_chiller_qty??'-'}</b></td>
+    <td>${r.intestine_weight_kg??'-'} (${r.intestine_pct??4}%)</td>
     <td>${r.ccp1_result==='ผ่าน'?'<span class="badge badge-pass">ผ่าน</span>':(r.ccp1_result==='ไม่ผ่าน'?'<span class="badge badge-fail">ไม่ผ่าน</span>':'-')}</td>
-  </tr>`).join('') || `<tr><td colspan="8"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  </tr>`).join('') || `<tr><td colspan="8"><div class="empty-state">${searchLot?`ไม่พบ Lot ที่ตรงกับ "${searchLot}"`:'ยังไม่มีข้อมูล'}</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
@@ -733,21 +769,26 @@ async function renderEVIPage(){
         <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchLBForEVI()">🔄 ดึงข้อมูลจาก LB</button></div>
       </div>
       <div id="eviLbInfo"></div>
-      <div class="form-grid3" style="margin-top:10px;">
-        <div class="field"><label>ไก่ตาย DOA (ก่อนเข้ากระบวนการ)</label><input type="number" id="eviDoa" value="0" oninput="recalcEVI()"></div>
+      <div class="form-grid" style="margin-top:10px;">
         <div class="field"><label>Condemn (ตัว)</label><input type="number" id="eviCondemn" value="0" oninput="recalcEVI()"></div>
         <div class="field"><label>Partial ขายหน้าโรง (ตัว)</label><input type="number" id="eviPartial" value="0" oninput="recalcEVI()"></div>
       </div>
       <div class="form-grid" style="margin-top:6px;">
-        <div class="field"><label>จำนวนตัวเข้าเชือด (คำนวณอัตโนมัติ = รับ - DOA)</label><input type="text" id="eviEnteringSlaughter" class="calc-field" disabled></div>
-        <div class="field"><label>จำนวนตัวเข้า Chiller (คำนวณอัตโนมัติ = เข้าเชือด - Condemn - Partial)</label><input type="text" id="eviEnteringChiller" class="calc-field" disabled></div>
+        <div class="field"><label>จำนวนตัวเข้าเชือด (ตั้งต้น = รับ LB − ตายทั้งหมด — แก้ไขได้)</label><input type="number" id="eviEnteringSlaughter" class="calc-field" oninput="recalcEVI(true)"></div>
+        <div class="field"><label>จำนวนตัวเข้า Chiller (ตั้งต้น = เข้าเชือด − Condemn − Partial — แก้ไขได้)</label><input type="number" id="eviEnteringChiller" class="calc-field"></div>
       </div>
       <div class="form-grid" style="margin-top:6px;">
         <div class="field"><label>ผล CCP1 (IO Washer)</label><select id="eviCcp1"><option value="">ยังไม่ตรวจ</option><option>ผ่าน</option><option>ไม่ผ่าน</option></select></div>
         <div class="field"><label>หมายเหตุ</label><input type="text" id="eviNote"></div>
       </div>
 
-      <div class="card-title" style="margin-top:16px;">ผลผลิตเครื่องใน (By-product)</div>
+      <div class="card-title" style="margin-top:16px;font-size:13px;">ไส้ — ผลผลิตประมาณการ (% ของน้ำหนักไก่เป็นจาก LB — แก้ไขได้)</div>
+      <div class="form-grid">
+        <div class="field"><label>ไส้ — % ของ นน. ไก่เป็น (ค่าตั้งต้น 4%)</label><input type="number" id="eviIntestinePct" value="4" step="0.1" oninput="recalcEVIIntestine()"></div>
+        <div class="field"><label>ไส้ — น้ำหนัก (kg)</label><input type="number" id="eviIntestineWeight" class="calc-field" step="0.1"></div>
+      </div>
+
+      <div class="card-title" style="margin-top:16px;">ผลผลิตเครื่องใน (By-product อื่นๆ)</div>
       <div class="line-item-row grid-head"><div>รายการสินค้า</div><div>จำนวน (kg)</div><div>จำนวน (ชิ้น)</div><div>หมายเหตุ</div><div></div></div>
       <div id="eviByproductRows"></div>
 
@@ -756,12 +797,18 @@ async function renderEVIPage(){
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    ${stationHeaderHtml('sh-evi','🫀','EVI (ล้วงเครื่องใน)','คำนวณจำนวนตัวเข้า Chiller อัตโนมัติ')}
+    ${stationHeaderHtml('sh-evi','🫀','EVI (ล้วงเครื่องใน)','คำนวณจำนวนตัวเข้า Chiller อัตโนมัติ (แก้ไขได้)')}
     ${breadcrumbHtml('evi')}
-    <div class="page-desc">บันทึกข้อมูลการล้วงเครื่องใน คำนวณจำนวนตัวเข้า Chiller อัตโนมัติ</div>
+    <div class="page-desc">บันทึกข้อมูลการล้วงเครื่องใน — ตัวไก่ตายบันทึกที่ LB แล้ว ที่นี่ดึงมาคำนวณอัตโนมัติ</div>
     ${formHtml}
-    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>LB Lot</th><th>Sublot</th><th>เข้าเชือด</th><th>DOA</th><th>Condemn</th><th>Partial</th><th>เข้า Chiller</th><th>CCP1</th></tr></thead><tbody>${tableRows}</tbody></table>
+    <div class="card">
+      <div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <div class="trace-search" style="margin-bottom:12px;">
+        <input type="text" id="eviSearchLot" value="${searchLot||''}" placeholder="ค้นหา Lot เช่น 2569261 (เต็ม) หรือ 261 (วันจูเลียน — ขึ้นทุกปี)">
+        <button class="btn btn-sm" onclick="document.getElementById('eviSearchLot').value && renderEVIPage(document.getElementById('eviSearchLot').value.trim())">🔍 ค้นหา</button>
+        <button class="btn btn-ghost btn-sm" onclick="renderEVIPage()">ล้างการค้นหา</button>
+      </div>
+      <table><thead><tr><th>LB Lot</th><th>Sublot</th><th>เข้าเชือด</th><th>Condemn</th><th>Partial</th><th>เข้า Chiller</th><th>ไส้</th><th>CCP1</th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   renderEVIByproductRows();
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'evi',null); });
@@ -776,19 +823,23 @@ async function fetchLBForEVI(){
     const match = rows.find(r=>r.lb_lot_code===lot && r.sublot===sublot);
     if(!match){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ LB Lot ${lot} / Sublot ${sublot}</div>`; window._eviLbData=null; return; }
     window._eviLbData = match;
-    infoEl.innerHTML = `<div class="note-banner">พบข้อมูล: ฟาร์ม ${match.farm_id||'-'} / เล้า ${match.house||'-'} / Flock ${match.flock_batch||'-'} / จำนวนรับ ${match.received_qty} ตัว / วันที่ ${match.received_date}</div>`;
+    infoEl.innerHTML = `<div class="note-banner">พบข้อมูล: ฟาร์ม ${match.farm_id||'-'} / เล้า ${match.house||'-'} / Flock ${match.flock_batch||'-'} / จำนวนรับ ${match.received_qty} ตัว / ตายทั้งหมด ${match.dead_on_arrival_qty||0} ตัว / น้ำหนักไก่เป็นรวม ${((match.avg_weight_kg||0)*match.received_qty).toFixed(1)} kg</div>`;
+    document.getElementById('eviEnteringSlaughter').value = match.received_qty - (match.dead_on_arrival_qty||0);
     recalcEVI();
+    recalcEVIIntestine();
   }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
 }
-function recalcEVI(){
-  if(!window._eviLbData) return;
-  const doa=Number(document.getElementById('eviDoa').value||0);
+function recalcEVI(fromEnteringSlaughterEdit){
+  const enteringSlaughter = Number(document.getElementById('eviEnteringSlaughter').value||0);
   const condemn=Number(document.getElementById('eviCondemn').value||0);
   const partial=Number(document.getElementById('eviPartial').value||0);
-  const enteringSlaughter = window._eviLbData.received_qty - doa;
-  const enteringChiller = enteringSlaughter - condemn - partial;
-  document.getElementById('eviEnteringSlaughter').value = enteringSlaughter;
-  document.getElementById('eviEnteringChiller').value = enteringChiller;
+  document.getElementById('eviEnteringChiller').value = enteringSlaughter - condemn - partial;
+}
+function recalcEVIIntestine(){
+  if(!window._eviLbData) return;
+  const totalLiveWeight = (window._eviLbData.avg_weight_kg||0) * window._eviLbData.received_qty;
+  const pct = Number(document.getElementById('eviIntestinePct').value||4);
+  document.getElementById('eviIntestineWeight').value = (totalLiveWeight*pct/100).toFixed(1);
 }
 function renderEVIByproductRows(){
   const container = document.getElementById('eviByproductRows');
@@ -805,11 +856,15 @@ function renderEVIByproductRows(){
 async function submitEVI(){
   if(!window._eviLbData){ alert('กรุณาดึงข้อมูลจาก LB ก่อน'); return; }
   const lot=window._eviLbData.lb_lot_code, sublot=window._eviLbData.sublot;
-  const doa=document.getElementById('eviDoa').value, condemn=document.getElementById('eviCondemn').value, partial=document.getElementById('eviPartial').value;
+  const enteringSlaughter=document.getElementById('eviEnteringSlaughter').value;
+  const condemn=document.getElementById('eviCondemn').value, partial=document.getElementById('eviPartial').value;
+  const enteringChiller=document.getElementById('eviEnteringChiller').value;
   const ccp1=document.getElementById('eviCcp1').value, note=document.getElementById('eviNote').value.trim();
+  const intestinePct=document.getElementById('eviIntestinePct').value, intestineWeight=document.getElementById('eviIntestineWeight').value;
   const byproducts = eviByproductRows.filter(r=>r.product_name && (r.qty_kg||r.qty_pcs));
   try{
-    await apiCreateEVI(lot, sublot, Number(doa||0), Number(condemn||0), Number(partial||0), ccp1||null, note, byproducts);
+    await apiCreateEVI(lot, sublot, Number(enteringSlaughter||0), Number(condemn||0), Number(partial||0), Number(enteringChiller||0),
+      ccp1||null, note, intestinePct?Number(intestinePct):4, intestineWeight?Number(intestineWeight):null, byproducts);
     renderEVIPage();
   }catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
