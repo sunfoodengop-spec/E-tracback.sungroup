@@ -398,8 +398,8 @@ async function apiListEVIByproducts(eviId){ return await rpc('rpc_list_evi_bypro
 
 // Chiller
 async function apiListChiller(lot,sublot){ return await rpc('rpc_list_chiller', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
-async function apiCreateChiller(eviLot,sublot,exitTime,exitQty,toWholebird,toCutup,temp,note){
-  return await rpc('rpc_create_chiller', {p_session_token:session.token, p_evi_lot:eviLot, p_sublot:sublot, p_exit_time:exitTime||null, p_exit_qty:exitQty, p_to_wholebird:toWholebird, p_to_cutup:toCutup, p_temp:temp, p_note:note});
+async function apiCreateChiller(eviLot,sublot,exitQty,toWholebird,toCutup,ccp2,note){
+  return await rpc('rpc_create_chiller', {p_session_token:session.token, p_evi_lot:eviLot, p_sublot:sublot, p_exit_qty:exitQty, p_to_wholebird:toWholebird, p_to_cutup:toCutup, p_ccp2:ccp2||null, p_note:note});
 }
 // Cut Up
 async function apiListCutup(lot,sublot){ return await rpc('rpc_list_cutup', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
@@ -890,13 +890,15 @@ async function renderChillerPage(){
   setLoading();
   let rows, farms;
   try{ [rows, farms] = await Promise.all([apiListChiller(), apiListFarmMaster()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3e แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
 
+  const ccp2Badge = (v)=> v==='ผ่าน' ? '<span class="badge badge-pass">ผ่าน</span>' : (v==='ไม่ผ่าน' ? '<span class="badge badge-fail">ไม่ผ่าน</span>' : '-');
   const tableRows = rows.map(r=>`<tr>
     <td class="lotcode">${r.evi_lot_code}</td><td>${r.sublot}</td><td>${farmNameFor(r.farm_id, farms)}</td>
-    <td>${r.entering_qty??'-'}</td><td>${r.exit_time||'-'}</td><td>${r.exit_qty??'-'}</td>
-    <td>${r.to_wholebird_qty??'-'}</td><td>${r.to_cutup_qty??'-'}</td><td>${r.temp_c??'-'}</td>
+    <td>${r.entering_qty??'-'}</td><td>${r.exit_qty??'-'}</td>
+    <td>${r.to_wholebird_qty??'-'}</td><td>${r.to_cutup_qty??'-'}</td><td>${ccp2Badge(r.ccp2_result)}</td>
+    <td>${r.note||'-'}</td>
   </tr>`).join('') || `<tr><td colspan="9"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const formHtml = canWrite() ? `
@@ -908,19 +910,18 @@ async function renderChillerPage(){
         <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchEVIForChiller()">🔄 ดึงข้อมูลจาก EVI</button></div>
       </div>
       <div id="chillerEviInfo"></div>
-      <div class="form-grid3" style="margin-top:10px;">
-        <div class="field"><label>เวลาออกจาก Chiller</label><input type="time" id="chillerExitTime"></div>
-        <div class="field"><label>จำนวนออกจาก Chiller (ตัว)</label><input type="number" id="chillerExitQty"></div>
-        <div class="field"><label>อุณหภูมิ (°C)</label><input type="number" step="0.1" id="chillerTemp"></div>
+      <div class="form-grid" style="margin-top:10px;">
+        <div class="field"><label>จำนวนออกจาก Chiller (ตัว)</label><input type="number" id="chillerExitQty" oninput="checkChillerBalance()"></div>
+        <div class="field"><label>ผล CCP2 (อุณหภูมิ Chiller)</label><select id="chillerCcp2"><option value="">ยังไม่ตรวจ</option><option>ผ่าน</option><option>ไม่ผ่าน</option></select></div>
       </div>
-      <div class="card-title" style="margin-top:12px;font-size:13px;">แยกเส้นทางหลังออกจาก Chiller</div>
+      <div class="card-title" style="margin-top:12px;font-size:13px;">แยกเส้นทางหลังออกจาก Chiller (กรอกช่องใดช่องหนึ่ง อีกช่องคำนวณให้อัตโนมัติ — แก้ไขเองได้)</div>
       <div class="form-grid">
-        <div class="field"><label>ไปผลิตสินค้าไก่ตัว (ตัว)</label><input type="number" id="chillerToWholebird" oninput="checkChillerBalance()"></div>
-        <div class="field"><label>แขวนขึ้นราวไป Cut-up (ตัว)</label><input type="number" id="chillerToCutup" oninput="checkChillerBalance()"></div>
+        <div class="field"><label>ไปผลิตสินค้าไก่ตัว (ตัว)</label><input type="number" id="chillerToWholebird" oninput="onChillerWholebirdInput()"></div>
+        <div class="field"><label>แขวนขึ้นราวไป Cut-up (ตัว)</label><input type="number" id="chillerToCutup" oninput="onChillerCutupInput()"></div>
       </div>
       <div id="chillerBalanceNote" style="font-size:12.5px;margin-top:4px;"></div>
-      <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="chillerNote"></div>
-      <div style="margin-top:12px;">${docUploadWidgetHtml('chiller', null, 'เอกสาร/รายงานอุณหภูมิ')}</div>
+      <div class="field full" style="margin-top:6px;"><label>หมายเหตุ <span id="chillerNoteRequiredMark" style="display:none;color:var(--red-600);">* บังคับกรอกเพราะยอดไม่ Balance</span></label><input type="text" id="chillerNote"></div>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('chiller', null, 'เอกสาร/รายงาน CCP2')}</div>
       <button class="btn" style="margin-top:12px;" onclick="submitChiller()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
@@ -930,7 +931,7 @@ async function renderChillerPage(){
     <div class="page-desc">บันทึกข้อมูลการนำซากเข้า-ออกจาก Chiller และแยกเส้นทางไปสินค้าไก่ตัว/Cut-up</div>
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>EVI Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เข้า Chiller</th><th>เวลาออก</th><th>ออก</th><th>ไปไก่ตัว</th><th>ไป Cut-up</th><th>อุณหภูมิ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>EVI Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เข้า Chiller</th><th>ออก</th><th>ไปไก่ตัว</th><th>ไป Cut-up</th><th>CCP2</th><th>หมายเหตุ</th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'chiller',null); });
 }
@@ -948,25 +949,53 @@ async function fetchEVIForChiller(){
     checkChillerBalance();
   }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
 }
+function onChillerWholebirdInput(){
+  const exitQty = Number(document.getElementById('chillerExitQty').value||0);
+  const wb = Number(document.getElementById('chillerToWholebird').value||0);
+  document.getElementById('chillerToCutup').value = exitQty - wb;
+  checkChillerBalance();
+}
+function onChillerCutupInput(){
+  const exitQty = Number(document.getElementById('chillerExitQty').value||0);
+  const cu = Number(document.getElementById('chillerToCutup').value||0);
+  document.getElementById('chillerToWholebird').value = exitQty - cu;
+  checkChillerBalance();
+}
+function chillerHasDiff(){
+  const wb=Number(document.getElementById('chillerToWholebird').value||0);
+  const cu=Number(document.getElementById('chillerToCutup').value||0);
+  const exitQty=Number(document.getElementById('chillerExitQty').value||0);
+  return (wb+cu) !== exitQty;
+}
 function checkChillerBalance(){
   const noteEl = document.getElementById('chillerBalanceNote');
-  if(!window._chillerEviData || !noteEl) return;
+  const markEl = document.getElementById('chillerNoteRequiredMark');
+  if(!noteEl) return;
   const wb=Number(document.getElementById('chillerToWholebird').value||0);
   const cu=Number(document.getElementById('chillerToCutup').value||0);
   const exitQty=Number(document.getElementById('chillerExitQty').value||0);
   const sum = wb+cu;
-  if(sum===0){ noteEl.innerHTML=''; return; }
-  if(sum===exitQty){ noteEl.innerHTML = `<span style="color:var(--green-700);">✓ ยอดรวมตรงกับจำนวนออกจาก Chiller (${exitQty})</span>`; }
-  else{ noteEl.innerHTML = `<span style="color:var(--red-600);">⚠ ยอดรวม (${sum}) ไม่ตรงกับจำนวนออกจาก Chiller (${exitQty}) ต่างกัน ${Math.abs(sum-exitQty)} ตัว</span>`; }
+  if(sum===0 && exitQty===0){ noteEl.innerHTML=''; if(markEl) markEl.style.display='none'; return; }
+  if(sum===exitQty){
+    noteEl.innerHTML = `<span style="color:var(--green-700);">✓ ยอดรวมตรงกับจำนวนออกจาก Chiller (${exitQty})</span>`;
+    if(markEl) markEl.style.display='none';
+  } else {
+    noteEl.innerHTML = `<span style="color:var(--red-600);">⚠ ยอดรวม (${sum}) ไม่ตรงกับจำนวนออกจาก Chiller (${exitQty}) ต่างกัน ${Math.abs(sum-exitQty)} ตัว — ต้องระบุหมายเหตุก่อนบันทึก</span>`;
+    if(markEl) markEl.style.display='inline';
+  }
 }
 async function submitChiller(){
   if(!window._chillerEviData){ alert('กรุณาดึงข้อมูลจาก EVI ก่อน'); return; }
   const lot=window._chillerEviData.lb_lot_code, sublot=window._chillerEviData.sublot;
-  const exitTime=document.getElementById('chillerExitTime').value, exitQty=document.getElementById('chillerExitQty').value;
+  const exitQty=document.getElementById('chillerExitQty').value;
   const toWb=document.getElementById('chillerToWholebird').value, toCu=document.getElementById('chillerToCutup').value;
-  const temp=document.getElementById('chillerTemp').value, note=document.getElementById('chillerNote').value.trim();
+  const ccp2=document.getElementById('chillerCcp2').value, note=document.getElementById('chillerNote').value.trim();
+  if(chillerHasDiff() && !note){
+    alert('จำนวนไปไก่ตัว + ไป Cut-up ไม่ตรงกับจำนวนออกจาก Chiller กรุณาระบุหมายเหตุอธิบายสาเหตุก่อนบันทึก');
+    return;
+  }
   try{
-    await apiCreateChiller(lot, sublot, exitTime||null, exitQty?Number(exitQty):null, toWb?Number(toWb):null, toCu?Number(toCu):null, temp?Number(temp):null, note);
+    await apiCreateChiller(lot, sublot, exitQty?Number(exitQty):null, toWb?Number(toWb):null, toCu?Number(toCu):null, ccp2||null, note);
     renderChillerPage();
   }catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
