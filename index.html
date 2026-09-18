@@ -826,11 +826,20 @@ async function fetchLBForEVI(){
   if(!lot||!sublot){ infoEl.innerHTML=`<div class="err-banner">กรุณากรอก LB Lot และ Sublot</div>`; return; }
   try{
     const [rows, farms] = await Promise.all([apiListLB(lot, sublot), apiListFarmMaster()]);
-    const match = rows.find(r=>r.lb_lot_code===lot && r.sublot===sublot);
-    if(!match){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ LB Lot ${lot} / Sublot ${sublot}</div>`; window._eviLbData=null; return; }
-    window._eviLbData = match;
-    infoEl.innerHTML = `<div class="note-banner">พบข้อมูล: ฟาร์ม ${farmNameFor(match.farm_id, farms)} / เล้า ${match.house||'-'} / Flock ${match.flock_batch||'-'} / จำนวนรับ ${match.received_qty} ตัว / ตายทั้งหมด ${match.dead_on_arrival_qty||0} ตัว / น้ำหนักไก่เป็นรวม ${((match.avg_weight_kg||0)*match.received_qty).toFixed(1)} kg</div>`;
-    document.getElementById('eviEnteringSlaughter').value = match.received_qty - (match.dead_on_arrival_qty||0);
+    const matches = rows.filter(r=>r.lb_lot_code===lot && r.sublot===sublot);
+    if(matches.length===0){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ LB Lot ${lot} / Sublot ${sublot}</div>`; window._eviLbData=null; return; }
+
+    // Sub Lot เดียวกันอาจมีหลายฟาร์ม/เล้า (คนละแถวใน LB) — ต้องรวมยอดจากทุกแถว ไม่ใช่หยิบแค่แถวแรก
+    const totalReceived = matches.reduce((s,r)=>s+(r.received_qty||0), 0);
+    const totalDead = matches.reduce((s,r)=>s+(r.dead_on_arrival_qty||0), 0);
+    const totalLiveWeight = matches.reduce((s,r)=>s+((r.avg_weight_kg||0)*(r.received_qty||0)), 0);
+    const farmList = [...new Set(matches.map(m=>farmNameFor(m.farm_id, farms)))].join(', ');
+    const houseList = [...new Set(matches.map(m=>m.house).filter(Boolean))].join(', ');
+
+    window._eviLbData = { lb_lot_code: lot, sublot: sublot, received_qty: totalReceived, dead_on_arrival_qty: totalDead, total_live_weight: totalLiveWeight, source_count: matches.length };
+
+    infoEl.innerHTML = `<div class="note-banner">พบข้อมูล ${matches.length} รายการ (ฟาร์ม: ${farmList||'-'}${houseList?' / เล้า: '+houseList:''}) — รวมจำนวนรับ <b>${totalReceived}</b> ตัว / ตายทั้งหมดรวม <b>${totalDead}</b> ตัว / น้ำหนักไก่เป็นรวม <b>${totalLiveWeight.toFixed(1)}</b> kg</div>`;
+    document.getElementById('eviEnteringSlaughter').value = totalReceived - totalDead;
     recalcEVI();
     recalcEVIIntestine();
   }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
@@ -843,7 +852,7 @@ function recalcEVI(fromEnteringSlaughterEdit){
 }
 function recalcEVIIntestine(){
   if(!window._eviLbData) return;
-  const totalLiveWeight = (window._eviLbData.avg_weight_kg||0) * window._eviLbData.received_qty;
+  const totalLiveWeight = window._eviLbData.total_live_weight || 0;
   const pct = Number(document.getElementById('eviIntestinePct').value||4);
   document.getElementById('eviIntestineWeight').value = (totalLiveWeight*pct/100).toFixed(1);
 }
