@@ -403,6 +403,8 @@ async function apiCreateChiller(eviLot,sublot,exitQty,toWholebird,toCutup,ccp2,n
 }
 // Cut Up
 async function apiListCutup(lot,sublot){ return await rpc('rpc_list_cutup', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
+async function apiListRMMaster(){ return await rpc('rpc_list_rm_master', {p_session_token:session.token}); }
+async function apiUpsertRMMaster(code,name,partGroup,dept,active){ return await rpc('rpc_upsert_rm_master', {p_session_token:session.token, p_rm_code:code, p_rm_name:name, p_part_group:partGroup, p_department:dept, p_active:active}); }
 async function apiListCutupProducts(cutupId){ return await rpc('rpc_list_cutup_products', {p_session_token:session.token, p_cutup_record_id:cutupId}); }
 async function apiCreateCutup(chillerLot,sublot,cutDate,note,products){
   return await rpc('rpc_create_cutup', {p_session_token:session.token, p_chiller_lot:chillerLot, p_sublot:sublot, p_cut_date:cutDate, p_note:note, p_products:products});
@@ -451,7 +453,7 @@ function renderSidebar(){
     {key:'specialcut',name:'🔪 SPECIAL CUT (ตัดแต่งพิเศษ)'},{key:'freezepack',name:'📦 FREEZE-PACK (แช่แข็ง/บรรจุ)'},
     {key:'cs',name:'🏢 CS (ห้องเย็น)'},{key:'load',name:'🚚 LOAD (จัดส่ง)'},
   ]);
-  h+=navGroup('Master Data', [{key:'farmmaster',name:'🏡 Farm Master'},{key:'productmaster',name:'📦 Product Master'}]);
+  h+=navGroup('Master Data', [{key:'farmmaster',name:'🏡 Farm Master'},{key:'rmmaster',name:'🧩 RM Master List'},{key:'productmaster',name:'📦 Product Master'}]);
   if(isAdmin()){
     h+=navGroup('Admin', [{key:'employees',name:'👥 จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'📜 Audit Log',dot:'admin'}]);
   }
@@ -478,6 +480,7 @@ function navigateTo(key){
   else if(key==='cs') renderCSPage();
   else if(key==='load') renderLoadPage();
   else if(key==='farmmaster') renderFarmMasterPage();
+  else if(key==='rmmaster') renderRMMasterPage();
   else if(key==='productmaster') renderProductMasterPage();
   else if(key==='employees') renderEmployeesPage();
   else if(key==='auditlog') renderAuditLogPage();
@@ -1002,23 +1005,23 @@ async function submitChiller(){
 
 /* ================= CUT UP ================= */
 let cutupProductRows = [];
+window._cutupChillerData = null;
 async function renderCutupPage(){
   setLoading();
-  let rows, products;
-  try{ [rows, products] = await Promise.all([apiListCutup(), apiListProductMaster()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  let rows, rmItems;
+  try{ [rows, rmItems] = await Promise.all([apiListCutup(), apiListRMMaster()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3f แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
-  window._cutupProductCache = products;
-  cutupProductRows = [{product_name:'',product_code:'',qty_pcs:'',weight_kg:'',destination:''}];
+  window._rmMasterCache = rmItems;
+  cutupProductRows = [{rm_code:'', total_weight_kg:'', destinations:[{dept:'', weight_kg:''}]}];
 
   const rowParts = await Promise.all(rows.map(async r=>{
     let prods=[]; try{ prods = await apiListCutupProducts(r.id); }catch(e){}
-    const totalPcs = prods.reduce((s,p)=>s+(p.qty_pcs||0),0);
     const totalWeight = prods.reduce((s,p)=>s+(Number(p.weight_kg)||0),0);
     return `<tr><td>${r.cut_date||'-'}</td><td class="lotcode">${r.chiller_lot_code}</td><td>${r.sublot}</td>
-      <td>${prods.length} รายการ</td><td>${totalPcs}</td><td>${totalWeight.toFixed(1)}</td></tr>`;
+      <td>${prods.length} รายการ</td><td>${totalWeight.toFixed(1)}</td></tr>`;
   }));
-  const tableRows = rowParts.join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  const tableRows = rowParts.join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
@@ -1026,12 +1029,16 @@ async function renderCutupPage(){
       <div class="form-grid3">
         <div class="field"><label>Chiller Lot</label><input type="text" id="cutupLot" placeholder="เช่น 2569227"></div>
         <div class="field"><label>Sublot</label><input type="text" id="cutupSublot" placeholder="เช่น 01"></div>
-        <div class="field"><label>วันที่ตัดแต่ง</label><input type="date" id="cutupDate" value="${todayStr()}"></div>
+        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchChillerForCutup()">🔄 ดึงข้อมูลจาก Chiller-OH</button></div>
       </div>
-      <div class="card-title" style="margin-top:14px;font-size:13px;">รายการผลผลิต</div>
-      <div class="line-item-row grid-head"><div>Product</div><div>จำนวน (ชิ้น)</div><div>น้ำหนัก (kg)</div><div>ส่งไป</div><div></div></div>
+      <div id="cutupChillerInfo"></div>
+      <div class="field" style="margin-top:10px;"><label>วันที่ตัดแต่ง</label><input type="date" id="cutupDate" value="${todayStr()}"></div>
+
+      <div class="card-title" style="margin-top:16px;font-size:13px;">รายการผลผลิต RM (แยกตามชิ้นส่วน — ระบุน้ำหนักรวม แล้วแยกปลายทางที่ส่งต่อได้หลายแผนก)</div>
       <div id="cutupProductRows"></div>
-      <div class="field full" style="margin-top:10px;"><label>หมายเหตุ</label><input type="text" id="cutupNote"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="cutupProductRows.push({rm_code:'',total_weight_kg:'',destinations:[{dept:'',weight_kg:''}]});renderCutupProductRows()">+ เพิ่มรายการ RM</button>
+
+      <div class="field full" style="margin-top:14px;"><label>หมายเหตุ</label><input type="text" id="cutupNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('cutup', null, 'สรุปผลผลิต/รูปภาพ')}</div>
       <button class="btn" style="margin-top:12px;" onclick="submitCutup()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
@@ -1039,33 +1046,73 @@ async function renderCutupPage(){
   document.getElementById('mainContent').innerHTML = `
     ${stationHeaderHtml('sh-cutup','✂️','CUT UP (ชำแหละ)','บันทึกผลผลิตแยกชิ้นส่วนและปลายทางที่ส่งต่อ')}
     ${breadcrumbHtml('cutup')}
-    <div class="page-desc">บันทึกผลผลิตแยกชิ้นส่วนจากซากไก่ (BB, ปีก, BL, สันใน ฯลฯ) และปลายทางที่ส่งต่อ</div>
+    <div class="page-desc">บันทึกผลผลิตแยกชิ้นส่วน (RM) จากซากไก่ตาม 6 กลุ่ม: BL / BB / Fillet / Wings / Carcass / Fat — 1 ชิ้นส่วนแยกส่งได้หลายแผนกปลายทางพร้อมระบุปริมาณ</div>
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>Chiller Lot</th><th>Sublot</th><th>รายการสินค้า</th><th>รวม (ชิ้น)</th><th>รวม (kg)</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>Chiller Lot</th><th>Sublot</th><th>รายการ RM</th><th>รวม (kg)</th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   renderCutupProductRows();
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'cutup',null); });
 }
+async function fetchChillerForCutup(){
+  const lot=document.getElementById('cutupLot').value.trim(), sublot=document.getElementById('cutupSublot').value.trim();
+  const infoEl=document.getElementById('cutupChillerInfo');
+  if(!lot||!sublot){ infoEl.innerHTML=`<div class="err-banner">กรุณากรอก Chiller Lot และ Sublot</div>`; return; }
+  try{
+    const rows = await apiListChiller(lot, sublot);
+    const match = rows.find(r=>r.evi_lot_code===lot && r.sublot===sublot);
+    if(!match){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ Chiller-OH Lot ${lot} / Sublot ${sublot}</div>`; window._cutupChillerData=null; return; }
+    window._cutupChillerData = match;
+    infoEl.innerHTML = `<div class="note-banner">จำนวนตัวรับจาก Chiller-OH (แขวนขึ้นราวไป Cut-up): <b>${match.to_cutup_qty??'-'}</b> ตัว</div>`;
+  }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
+}
 function renderCutupProductRows(){
   const container = document.getElementById('cutupProductRows');
   if(!container) return;
-  const products = window._cutupProductCache||[];
-  const dl = `<datalist id="cutupProductCodeList">${products.map(p=>`<option value="${p.product_code}">${p.product_name||''}</option>`).join('')}</datalist>`;
-  container.innerHTML = cutupProductRows.map((row,idx)=>`
-    <div class="line-item-row">
-      <input type="text" value="${row.product_code}" list="cutupProductCodeList" placeholder="Product Code" onchange="cutupProductRows[${idx}].product_code=this.value">
-      <input type="number" value="${row.qty_pcs}" onchange="cutupProductRows[${idx}].qty_pcs=this.value">
-      <input type="number" value="${row.weight_kg}" onchange="cutupProductRows[${idx}].weight_kg=this.value">
-      <input type="text" value="${row.destination}" placeholder="เช่น BB, ปีก, BL" onchange="cutupProductRows[${idx}].destination=this.value">
-      <button class="btn btn-ghost btn-sm" onclick="cutupProductRows.splice(${idx},1);renderCutupProductRows()">✕</button>
-    </div>`).join('') + dl + `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="cutupProductRows.push({product_name:'',product_code:'',qty_pcs:'',weight_kg:'',destination:''});renderCutupProductRows()">+ เพิ่มแถว</button>`;
+  const rmItems = window._rmMasterCache||[];
+  const dl = `<datalist id="rmCodeList">${rmItems.map(r=>`<option value="${r.rm_code}">${r.rm_name} (${r.part_group})</option>`).join('')}</datalist>`;
+  const deptOptions = ['SPECIAL CUT','FREEZE-PACK','CS'];
+  container.innerHTML = cutupProductRows.map((row,idx)=>{
+    const rmInfo = rmItems.find(r=>r.rm_code===row.rm_code);
+    const destRows = row.destinations.map((d,didx)=>`
+      <div class="line-item-row" style="grid-template-columns:1.2fr 1fr 34px;margin-bottom:4px;">
+        <select onchange="cutupProductRows[${idx}].destinations[${didx}].dept=this.value">
+          <option value="">-- เลือกแผนกปลายทาง --</option>
+          ${deptOptions.map(o=>`<option value="${o}" ${d.dept===o?'selected':''}>${o}</option>`).join('')}
+        </select>
+        <input type="number" value="${d.weight_kg}" placeholder="น้ำหนัก (kg)" onchange="cutupProductRows[${idx}].destinations[${didx}].weight_kg=this.value; renderCutupProductRows();">
+        <button class="icon-btn" onclick="cutupProductRows[${idx}].destinations.splice(${didx},1);renderCutupProductRows()">✕</button>
+      </div>`).join('');
+    const destTotal = row.destinations.reduce((s,d)=>s+(Number(d.weight_kg)||0),0);
+    const totalW = Number(row.total_weight_kg||0);
+    const balanceHtml = totalW>0
+      ? (destTotal===totalW ? `<span style="color:var(--green-700);">✓ แยกครบ ${destTotal}/${totalW} kg</span>` : `<span style="color:var(--amber-700);">⚠ แยกแล้ว ${destTotal}/${totalW} kg</span>`)
+      : '';
+    return `<div class="card" style="background:var(--gray-100);margin-bottom:10px;padding:12px 14px;">
+      <div class="line-item-row" style="grid-template-columns:1.4fr 1fr 34px;">
+        <input type="text" value="${row.rm_code}" list="rmCodeList" placeholder="RM Code" onchange="cutupProductRows[${idx}].rm_code=this.value; renderCutupProductRows();">
+        <input type="number" value="${row.total_weight_kg}" placeholder="น้ำหนักรวม (kg)" onchange="cutupProductRows[${idx}].total_weight_kg=this.value; renderCutupProductRows();">
+        <button class="icon-btn" onclick="cutupProductRows.splice(${idx},1);renderCutupProductRows()">✕</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin:5px 2px;">${rmInfo?rmInfo.rm_name+' — กลุ่ม '+rmInfo.part_group:'(เลือก RM Code จาก Master)'} &nbsp; ${balanceHtml}</div>
+      <div style="margin-left:6px;margin-top:6px;">
+        ${destRows}
+        <button class="btn btn-ghost btn-sm" style="margin-top:2px;" onclick="cutupProductRows[${idx}].destinations.push({dept:'',weight_kg:''});renderCutupProductRows()">+ เพิ่มปลายทาง</button>
+      </div>
+    </div>`;
+  }).join('') + dl;
 }
 async function submitCutup(){
   const lot=document.getElementById('cutupLot').value.trim(), sublot=document.getElementById('cutupSublot').value.trim();
   const date=document.getElementById('cutupDate').value, note=document.getElementById('cutupNote').value.trim();
   if(!lot||!sublot){ alert('กรุณากรอก Chiller Lot และ Sublot'); return; }
-  const products = cutupProductRows.filter(r=>r.product_code || r.qty_pcs || r.weight_kg);
+  const rmItems = window._rmMasterCache||[];
+  const invalid = cutupProductRows.filter(r=>r.rm_code && !rmItems.find(x=>x.rm_code===r.rm_code));
+  if(invalid.length>0){ alert(`พบ RM Code ที่ไม่มีใน RM Master ${invalid.length} รายการ กรุณาแก้ก่อนบันทึก`); return; }
+  const products = cutupProductRows.filter(r=>r.rm_code || r.total_weight_kg).map(r=>({
+    rm_code: r.rm_code, total_weight_kg: r.total_weight_kg,
+    destinations: r.destinations.filter(d=>d.dept)
+  }));
   if(products.length===0){ alert('กรุณากรอกรายการผลผลิตอย่างน้อย 1 แถว'); return; }
   try{ await apiCreateCutup(lot, sublot, date, note, products); renderCutupPage(); }
   catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
@@ -1376,6 +1423,84 @@ async function saveFarmMaster(){
   if(!id||!name){ alert('กรุณากรอก Farm ID และชื่อฟาร์ม'); return; }
   try{ await apiUpsertFarmMaster(id,name,addr,phone,active); renderFarmMasterPage(); }
   catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= Master Data: RM Master List (Cut Up) ================= */
+const RM_PART_GROUPS = ['BL','BB','Fillet','Wings','Carcass','Fat'];
+async function renderRMMasterPage(){
+  setLoading();
+  let rmItems;
+  try{ rmItems = await apiListRMMaster(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3f แล้ว'); return; }
+  rmItems = rmItems.slice().sort((a,b)=> a.part_group.localeCompare(b.part_group) || a.rm_code.localeCompare(b.rm_code));
+  const rows = rmItems.map(r=>`<tr>
+    <td class="lotcode">${r.rm_code}</td><td>${r.rm_name}</td><td><span class="badge badge-info">${r.part_group}</span></td><td>${r.produced_department||'-'}</td>
+    <td>${r.active?'<span class="badge badge-pass">Active</span>':'<span class="badge badge-fail">Inactive</span>'}</td>
+  </tr>`).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี RM Master</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">เพิ่ม RM Code ใหม่</div>
+      <div class="form-grid4">
+        <div class="field"><label>RM Code</label><input type="text" id="rmCode" placeholder="เช่น RM-BL-07"></div>
+        <div class="field"><label>ชื่อ</label><input type="text" id="rmName" placeholder="เช่น BL"></div>
+        <div class="field"><label>กลุ่มชิ้นส่วน</label><select id="rmPartGroup">${RM_PART_GROUPS.map(g=>`<option>${g}</option>`).join('')}</select></div>
+        <div class="field"><label>แผนกที่ผลิต</label><input type="text" id="rmDept" value="CUT UP"></div>
+      </div>
+      <button class="btn" style="margin-top:10px;" onclick="saveRMMaster()">💾 บันทึก</button>
+    </div>
+    <div class="card">
+      <div class="card-title">นำเข้าจาก Excel/CSV (คอลัมน์: RM Code, ชื่อ, กลุ่มชิ้นส่วน, แผนก)</div>
+      <textarea id="rmBulkCsv" placeholder="เช่น
+RM-BL-07,BL พิเศษ,BL,CUT UP
+RM-BB-05,ปีกใน,BB,CUT UP"></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="importRMBulkCsv()">นำเข้าจาก CSV</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">อัปโหลด Excel (.xlsx)<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importRMBulkExcel(this)"></label>
+      </div>
+      <div id="rmImportResult" style="margin-top:10px;font-size:13px;"></div>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    ${stationHeaderHtml('sh-master','🧩','RM Master List','ชิ้นส่วน RM ที่ผลิตได้จาก Cut Up แบ่งเป็น 6 กลุ่ม: BL / BB / Fillet / Wings / Carcass / Fat')}
+    ${formHtml}
+    <div class="card"><div class="card-title">RM ทั้งหมด (${rmItems.length})</div>
+      <table><thead><tr><th>RM Code</th><th>ชื่อ</th><th>กลุ่ม</th><th>แผนกที่ผลิต</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+}
+async function saveRMMaster(){
+  const code=document.getElementById('rmCode').value.trim(), name=document.getElementById('rmName').value.trim();
+  const group=document.getElementById('rmPartGroup').value, dept=document.getElementById('rmDept').value.trim();
+  if(!code||!name){ alert('กรุณากรอก RM Code และชื่อ'); return; }
+  try{ await apiUpsertRMMaster(code,name,group,dept,true); renderRMMasterPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+async function importRMRows(rowsData){
+  const resultEl = document.getElementById('rmImportResult');
+  resultEl.textContent = 'กำลังนำเข้า...';
+  let ok=0, fail=0;
+  for(const r of rowsData){
+    if(!r[0] || !r[1]) continue;
+    try{ await apiUpsertRMMaster(String(r[0]).trim(), String(r[1]).trim(), String(r[2]||'BL').trim(), String(r[3]||'CUT UP').trim(), true); ok++; }
+    catch(e){ fail++; }
+  }
+  resultEl.innerHTML = `นำเข้าสำเร็จ ${ok} รายการ${fail?`, ล้มเหลว ${fail} รายการ`:''}`;
+  renderRMMasterPage();
+}
+function importRMBulkCsv(){
+  const text = document.getElementById('rmBulkCsv').value.trim();
+  if(!text) return;
+  const rows = text.split('\n').map(l=>l.trim()).filter(l=>l).map(line=>line.split(/[,\t]/).map(p=>p.trim()));
+  importRMRows(rows);
+}
+function importRMBulkExcel(inputEl){
+  const file = inputEl.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const wb = XLSX.read(e.target.result, {type:'array'});
+    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+    importRMRows(json.filter(r=>r&&r[0]));
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 /* ================= Product Master ================= */
