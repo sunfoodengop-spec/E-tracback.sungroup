@@ -107,12 +107,50 @@
   .tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:16px;}
   .tab-btn{padding:9px 16px;font-size:13.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;}
   .tab-btn.active{color:var(--teal-700);border-bottom-color:var(--teal-700);}
+
+  /* ===== Top Bar ===== */
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 28px;background:#fff;border-bottom:1px solid var(--line);}
+  .topbar-brand{display:flex;align-items:center;gap:10px;}
+  .topbar-logo{font-size:30px;}
+  .topbar-title{font-weight:700;font-size:18px;color:var(--ink);line-height:1.2;}
+  .topbar-tagline{font-size:11px;color:var(--ink-soft);}
+  .topbar-right{display:flex;align-items:center;gap:18px;}
+  .bell-wrap{position:relative;font-size:21px;cursor:pointer;}
+  .bell-badge{position:absolute;top:-6px;right:-9px;background:var(--red-600);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:1px 5px;min-width:16px;text-align:center;}
+  .user-pill{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .user-avatar{width:32px;height:32px;border-radius:50%;background:var(--teal-100);display:flex;align-items:center;justify-content:center;font-size:16px;}
+
+  /* ===== Station Colored Header ===== */
+  .station-header{display:flex;align-items:center;gap:14px;padding:18px 22px;border-radius:12px;margin-bottom:16px;color:#fff;}
+  .station-header .icon-box{width:48px;height:48px;border-radius:12px;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
+  .station-header .title{font-size:19px;font-weight:700;}
+  .station-header .subtitle{font-size:12.5px;opacity:.92;margin-top:2px;}
+  .sh-farm{background:linear-gradient(135deg,#22C55E,#16A34A);}
+  .sh-feed{background:linear-gradient(135deg,#F59E0B,#D97706);}
+  .sh-hatchery{background:linear-gradient(135deg,#F472B6,#DB2777);}
+  .sh-lb{background:linear-gradient(135deg,#60A5FA,#2563EB);}
+  .sh-evi{background:linear-gradient(135deg,#38BDF8,#0284C7);}
+  .sh-chiller{background:linear-gradient(135deg,#22D3EE,#0891B2);}
+  .sh-cutup{background:linear-gradient(135deg,#F472B6,#C026D3);}
+  .sh-specialcut{background:linear-gradient(135deg,#FB923C,#EA580C);}
+  .sh-freezepack{background:linear-gradient(135deg,#818CF8,#4F46E5);}
+  .sh-cs{background:linear-gradient(135deg,#38BDF8,#0369A1);}
+  .sh-load{background:linear-gradient(135deg,#2DD4BF,#0F766E);}
+  .sh-master{background:linear-gradient(135deg,#94A3B8,#475569);}
+  .sh-admin{background:linear-gradient(135deg,#F87171,#DC2626);}
+
+  /* ===== Breadcrumb with icons ===== */
+  .breadcrumb .crumb{display:flex;align-items:center;gap:6px;}
+
+  /* ===== Table action icons ===== */
+  .icon-btn{background:none;border:none;cursor:pointer;font-size:15px;padding:3px 5px;border-radius:6px;}
+  .icon-btn:hover{background:var(--gray-100);}
 </style>
 </head>
 <body>
 <div id="loginScreen">
   <div class="login-card">
-    <div class="login-eyebrow">Poultry Traceability System</div>
+    <div class="login-eyebrow">🐓 Poultry Traceability System</div>
     <div class="login-title">เข้าสู่ระบบ</div>
     <div class="login-sub">Module 1 — Daily Data User (บันทึกข้อมูลประจำวันแต่ละแผนก)</div>
     <div class="field"><label for="loginCode">รหัสพนักงาน</label><input type="text" id="loginCode" placeholder="เช่น QC1032" autocomplete="username"></div>
@@ -135,15 +173,31 @@
 </div>
 
 <div id="appScreen">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <span class="topbar-logo">🐓</span>
+      <div>
+        <div class="topbar-title">Poultry Traceability System</div>
+        <div class="topbar-tagline">From Farm to Table &nbsp;|&nbsp; Safe Food • Traceable • Trust</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="bell-wrap" title="การแจ้งเตือน">🔔<span class="bell-badge" id="notifBadge">0</span></div>
+      <div class="user-pill">
+        <div class="user-avatar">👤</div>
+        <div><div style="font-weight:600;" id="topbarUserName"></div><div style="font-size:11px;color:var(--ink-soft);" id="topbarRoleName"></div></div>
+      </div>
+    </div>
+  </div>
   <div class="app-shell">
     <div class="sidebar">
-      <div class="brand"><div class="brand-name">Poultry Traceability</div><div class="brand-sub">Module 1: Daily Data User</div></div>
+      <div class="brand"><div class="brand-name">🐓 Poultry Traceability</div><div class="brand-sub">Module 1: Daily Data User</div></div>
       <div id="navContainer"></div>
       <div class="sidebar-footer">
         <div class="role-chip">บทบาท: <b id="roleDisplay"></b></div>
         <div class="user-chip" id="userNameDisplay"></div>
-        <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;margin-bottom:6px;" onclick="openChangePinDialog()">เปลี่ยน PIN</button>
-        <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;" onclick="doLogout()">ออกจากระบบ</button>
+        <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;margin-bottom:6px;" onclick="openChangePinDialog()">🔑 เปลี่ยน PIN</button>
+        <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;" onclick="doLogout()">🚪 ออกจากระบบ</button>
       </div>
     </div>
     <div class="main" id="mainContent"></div>
@@ -235,6 +289,8 @@ function enterApp(){
   document.getElementById('appScreen').style.display='block';
   document.getElementById('roleDisplay').textContent = ROLE_LABEL[session.role] || session.role;
   document.getElementById('userNameDisplay').textContent = session.full_name;
+  document.getElementById('topbarUserName').textContent = session.full_name;
+  document.getElementById('topbarRoleName').textContent = ROLE_LABEL[session.role] || session.role;
   navigateTo('dashboard');
 }
 window.addEventListener('DOMContentLoaded', ()=>{
@@ -385,25 +441,25 @@ async function apiGetAuditLog(limit,code,action){ return await rpc('rpc_get_audi
 let currentPage='dashboard';
 function renderSidebar(){
   let h='';
-  h+=navGroup('ภาพรวม', [{key:'dashboard',name:'หน้าหลัก',dot:'util'}]);
+  h+=navGroup('ภาพรวม', [{key:'dashboard',name:'🏠 หน้าหลัก',dot:'util'}]);
   h+=navGroup('ต้นน้ำ', [
-    {key:'farm',name:'FARM (ฟาร์ม)'},{key:'feed',name:'FEED (อาหารสัตว์)'},{key:'hatchery',name:'HATCHERY (โรงฟัก)'},
+    {key:'farm',name:'🏡 FARM (ฟาร์ม)'},{key:'feed',name:'🌽 FEED (อาหารสัตว์)'},{key:'hatchery',name:'🥚 HATCHERY (โรงฟัก)'},
   ]);
   h+=navGroup('สายการผลิต', [
-    {key:'lb',name:'LB (รับไก่เป็น)'},{key:'evi',name:'EVI (ล้วงเครื่องใน)'},
-    {key:'chiller',name:'CHILLER-OH (ลดอุณหภูมิซาก)'},{key:'cutup',name:'CUT UP (ชำแหละ)'},
-    {key:'specialcut',name:'SPECIAL CUT (ตัดแต่งพิเศษ)'},{key:'freezepack',name:'FREEZE-PACK (แช่แข็ง/บรรจุ)'},
-    {key:'cs',name:'CS (ห้องเย็น)'},{key:'load',name:'LOAD (จัดส่ง)'},
+    {key:'lb',name:'🐤 LB (รับไก่เป็น)'},{key:'evi',name:'🫀 EVI (ล้วงเครื่องใน)'},
+    {key:'chiller',name:'❄️ CHILLER-OH (ลดอุณหภูมิซาก)'},{key:'cutup',name:'✂️ CUT UP (ชำแหละ)'},
+    {key:'specialcut',name:'🔪 SPECIAL CUT (ตัดแต่งพิเศษ)'},{key:'freezepack',name:'📦 FREEZE-PACK (แช่แข็ง/บรรจุ)'},
+    {key:'cs',name:'🏢 CS (ห้องเย็น)'},{key:'load',name:'🚚 LOAD (จัดส่ง)'},
   ]);
-  h+=navGroup('Master Data', [{key:'farmmaster',name:'Farm Master'},{key:'productmaster',name:'Product Master'}]);
+  h+=navGroup('Master Data', [{key:'farmmaster',name:'🏡 Farm Master'},{key:'productmaster',name:'📦 Product Master'}]);
   if(isAdmin()){
-    h+=navGroup('Admin', [{key:'employees',name:'จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'Audit Log',dot:'admin'}]);
+    h+=navGroup('Admin', [{key:'employees',name:'👥 จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'📜 Audit Log',dot:'admin'}]);
   }
   document.getElementById('navContainer').innerHTML=h;
 }
 function navGroup(label, items){
   let h=`<div class="nav-group-label">${label}</div>`;
-  items.forEach(it=>{ h+=`<div class="nav-item ${currentPage===it.key?'active':''}" onclick="navigateTo('${it.key}')"><span class="nav-dot ${it.dot||''}"></span>${it.name}</div>`; });
+  items.forEach(it=>{ h+=`<div class="nav-item ${currentPage===it.key?'active':''}" onclick="navigateTo('${it.key}')">${it.name}</div>`; });
   return h;
 }
 function navigateTo(key){
@@ -426,9 +482,15 @@ function navigateTo(key){
   else if(key==='employees') renderEmployeesPage();
   else if(key==='auditlog') renderAuditLogPage();
 }
+function stationHeaderHtml(colorClass, icon, title, subtitle){
+  return `<div class="station-header ${colorClass}">
+    <div class="icon-box">${icon}</div>
+    <div><div class="title">${title}</div><div class="subtitle">${subtitle}</div></div>
+  </div>`;
+}
 function breadcrumbHtml(activeKey){
-  const steps=[['lb','LB'],['evi','EVI'],['chiller','Chiller-OH'],['cutup','Cut Up'],['specialcut','Special Cut'],['freezepack','Freeze-Pack'],['cs','CS'],['load','Load']];
-  return `<div class="breadcrumb">${steps.map(([k,label],i)=>`${i>0?'<span class="arrow">→</span>':''}<span class="crumb ${k===activeKey?'active':''}" onclick="navigateTo('${k}')">${label}</span>`).join('')}</div>`;
+  const steps=[['lb','🐤','LB'],['evi','🫀','EVI'],['chiller','❄️','Chiller-OH'],['cutup','✂️','Cut Up'],['specialcut','🔪','Special Cut'],['freezepack','📦','Freeze-Pack'],['cs','🏢','CS'],['load','🚚','Load']];
+  return `<div class="breadcrumb">${steps.map(([k,icon,label],i)=>`${i>0?'<span class="arrow">→</span>':''}<span class="crumb ${k===activeKey?'active':''}" onclick="navigateTo('${k}')">${icon} ${label}</span>`).join('')}</div>`;
 }
 
 /* ================= DASHBOARD ================= */
@@ -442,19 +504,18 @@ async function renderDashboard(){
   }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3 + patch3b แล้ว'); return; }
 
   const cards = [
-    {key:'lb', label:'LB (รับไก่เป็น)', n:lb.length},
-    {key:'evi', label:'EVI (ล้วงเครื่องใน)', n:evi.length},
-    {key:'chiller', label:'Chiller-OH', n:chiller.length},
-    {key:'cutup', label:'Cut Up', n:cutup.length},
-    {key:'specialcut', label:'Special Cut', n:sc.length},
-    {key:'freezepack', label:'Freeze-Pack', n:fp.length},
-    {key:'cs', label:'CS (ห้องเย็น)', n:cs.length},
-    {key:'load', label:'Load (จัดส่ง)', n:load.length},
-  ].map(c=>`<div class="stat-card" onclick="navigateTo('${c.key}')"><div class="num">${c.n}</div><div class="lbl">${c.label}</div></div>`).join('');
+    {key:'lb', icon:'🐤', label:'LB (รับไก่เป็น)', n:lb.length},
+    {key:'evi', icon:'🫀', label:'EVI (ล้วงเครื่องใน)', n:evi.length},
+    {key:'chiller', icon:'❄️', label:'Chiller-OH', n:chiller.length},
+    {key:'cutup', icon:'✂️', label:'Cut Up', n:cutup.length},
+    {key:'specialcut', icon:'🔪', label:'Special Cut', n:sc.length},
+    {key:'freezepack', icon:'📦', label:'Freeze-Pack', n:fp.length},
+    {key:'cs', icon:'🏢', label:'CS (ห้องเย็น)', n:cs.length},
+    {key:'load', icon:'🚚', label:'Load (จัดส่ง)', n:load.length},
+  ].map(c=>`<div class="stat-card" onclick="navigateTo('${c.key}')"><div style="font-size:22px;">${c.icon}</div><div class="num">${c.n}</div><div class="lbl">${c.label}</div></div>`).join('');
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">Module 1 · Daily Data User</div>
-    <div class="page-title">หน้าหลัก</div>
+    ${stationHeaderHtml('sh-master','🏠','หน้าหลัก','Module 1 · Daily Data User — ภาพรวมข้อมูลประจำวัน')}
     <div class="page-desc">เลือก Process ที่ต้องการบันทึกข้อมูลประจำวันจากเมนูด้านซ้าย — แต่ละหน้าจะดึงข้อมูลจากแผนกก่อนหน้าให้อัตโนมัติ</div>
     <div class="grid-cards">${cards}</div>
   `;
@@ -484,12 +545,11 @@ async function renderFarmPage(){
       <div style="margin-top:12px;">
         ${docUploadWidgetHtml('farm', null, 'เอกสารฟาร์ม')}
       </div>
-      <button class="btn" style="margin-top:12px;" onclick="submitFarmDispatch()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitFarmDispatch()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">ต้นน้ำ</div>
-    <div class="page-title">FARM — ฟาร์ม</div>
+    ${stationHeaderHtml('sh-farm','🏡','FARM (ฟาร์ม)','บันทึกข้อมูลการเลี้ยงและส่งไก่เข้าโรงเชือด')}
     <div class="page-desc">บันทึกข้อมูลการเลี้ยงและส่งไก่เข้าโรงเชือด</div>
     ${formHtml}
     <div class="card"><div class="card-title">รายการนัดส่ง (${rows.length})</div>
@@ -527,12 +587,11 @@ async function renderFeedPage(){
         <div class="field"><label>สถานะ</label><select id="feedStatus"><option>รอตรวจ</option><option>รับแล้ว</option></select></div>
       </div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('feed', null, 'ผลตรวจ/ใบส่งของ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitFeed()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitFeed()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">ต้นน้ำ</div>
-    <div class="page-title">FEED — อาหารสัตว์</div>
+    ${stationHeaderHtml('sh-feed','🌽','FEED (อาหารสัตว์)','บันทึกการรับวัตถุดิบเข้าผลิตอาหารสัตว์')}
     <div class="page-desc">บันทึกการรับวัตถุดิบเข้าผลิตอาหารสัตว์</div>
     ${formHtml}
     <div class="card"><div class="card-title">รายการรับวัตถุดิบ (${rows.length})</div>
@@ -571,12 +630,11 @@ async function renderHatcheryPage(){
       </div>
       <select id="hatchStatus" style="max-width:200px;margin-top:6px;"><option>ฟักไข่</option><option>พร้อมส่ง</option><option>ส่งแล้ว</option></select>
       <div style="margin-top:12px;">${docUploadWidgetHtml('hatchery', null, 'ผลตรวจ/รูปลูกไก่')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitHatchery()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitHatchery()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">ต้นน้ำ</div>
-    <div class="page-title">HATCHERY — โรงฟัก</div>
+    ${stationHeaderHtml('sh-hatchery','🥚','HATCHERY (โรงฟัก)','บันทึกข้อมูลการผลิตลูกไก่')}
     <div class="page-desc">บันทึกข้อมูลการผลิตลูกไก่</div>
     ${formHtml}
     <div class="card"><div class="card-title">รายการผลิต (${rows.length})</div>
@@ -624,12 +682,11 @@ async function renderLBPage(){
       </div>
       <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="lbNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('lb', null, 'เอกสารรับไก่')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitLB()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitLB()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">สายการผลิต</div>
-    <div class="page-title">LB — รับไก่เป็น</div>
+    ${stationHeaderHtml('sh-lb','🐤','LB (รับไก่เป็น)','จุดเริ่มต้นของ Lot DLD (พ.ศ.+วันจูเลียน+Sub Lot)')}
     ${breadcrumbHtml('lb')}
     <div class="page-desc">บันทึกข้อมูลรับไก่เป็นจากฟาร์ม เป็นจุดเริ่มต้นของ Lot DLD (พ.ศ.+วันจูเลียน+Sub Lot)</div>
     ${formHtml}
@@ -673,7 +730,7 @@ async function renderEVIPage(){
       <div class="form-grid3">
         <div class="field"><label>LB Lot</label><input type="text" id="eviLbLot" placeholder="เช่น 2569227"></div>
         <div class="field"><label>Sublot</label><input type="text" id="eviSublot" placeholder="เช่น 01"></div>
-        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchLBForEVI()">ดึงข้อมูลจาก LB</button></div>
+        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchLBForEVI()">🔄 ดึงข้อมูลจาก LB</button></div>
       </div>
       <div id="eviLbInfo"></div>
       <div class="form-grid3" style="margin-top:10px;">
@@ -695,12 +752,11 @@ async function renderEVIPage(){
       <div id="eviByproductRows"></div>
 
       <div style="margin-top:12px;">${docUploadWidgetHtml('evi', null, 'เอกสารแบบ/รายงาน/รูปภาพ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitEVI()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitEVI()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">สายการผลิต</div>
-    <div class="page-title">EVI — ล้วงเครื่องใน</div>
+    ${stationHeaderHtml('sh-evi','🫀','EVI (ล้วงเครื่องใน)','คำนวณจำนวนตัวเข้า Chiller อัตโนมัติ')}
     ${breadcrumbHtml('evi')}
     <div class="page-desc">บันทึกข้อมูลการล้วงเครื่องใน คำนวณจำนวนตัวเข้า Chiller อัตโนมัติ</div>
     ${formHtml}
@@ -778,7 +834,7 @@ async function renderChillerPage(){
       <div class="form-grid3">
         <div class="field"><label>EVI Lot</label><input type="text" id="chillerLot" placeholder="เช่น 2569227"></div>
         <div class="field"><label>Sublot</label><input type="text" id="chillerSublot" placeholder="เช่น 01"></div>
-        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchEVIForChiller()">ดึงข้อมูลจาก EVI</button></div>
+        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchEVIForChiller()">🔄 ดึงข้อมูลจาก EVI</button></div>
       </div>
       <div id="chillerEviInfo"></div>
       <div class="form-grid3" style="margin-top:10px;">
@@ -794,12 +850,11 @@ async function renderChillerPage(){
       <div id="chillerBalanceNote" style="font-size:12.5px;margin-top:4px;"></div>
       <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="chillerNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('chiller', null, 'เอกสาร/รายงานอุณหภูมิ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitChiller()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitChiller()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">สายการผลิต</div>
-    <div class="page-title">CHILLER-OH — ลดอุณหภูมิซาก</div>
+    ${stationHeaderHtml('sh-chiller','❄️','CHILLER-OH (ลดอุณหภูมิซาก)','ตรวจสอบยอดสมดุลเข้า-ออกอัตโนมัติ')}
     ${breadcrumbHtml('chiller')}
     <div class="page-desc">บันทึกข้อมูลการนำซากเข้า-ออกจาก Chiller และแยกเส้นทางไปสินค้าไก่ตัว/Cut-up</div>
     ${formHtml}
@@ -878,12 +933,11 @@ async function renderCutupPage(){
       <div id="cutupProductRows"></div>
       <div class="field full" style="margin-top:10px;"><label>หมายเหตุ</label><input type="text" id="cutupNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('cutup', null, 'สรุปผลผลิต/รูปภาพ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitCutup()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitCutup()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">สายการผลิต</div>
-    <div class="page-title">CUT UP — ชำแหละ</div>
+    ${stationHeaderHtml('sh-cutup','✂️','CUT UP (ชำแหละ)','บันทึกผลผลิตแยกชิ้นส่วนและปลายทางที่ส่งต่อ')}
     ${breadcrumbHtml('cutup')}
     <div class="page-desc">บันทึกผลผลิตแยกชิ้นส่วนจากซากไก่ (BB, ปีก, BL, สันใน ฯลฯ) และปลายทางที่ส่งต่อ</div>
     ${formHtml}
@@ -963,13 +1017,12 @@ async function renderSpecialcutPage(){
       <div class="line-item-row grid-head"><div>Product Code</div><div>จำนวน (ชิ้น)</div><div>น้ำหนัก (kg)</div><div>หมายเหตุ</div><div></div></div>
       <div id="scProductRows"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('specialcut', null, 'รายงานผลผลิต/รูปภาพ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitSpecialcut()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitSpecialcut()">💾 บันทึกข้อมูล</button>
       <div id="scSubmitResult" style="margin-top:10px;"></div>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">สายการผลิต</div>
-    <div class="page-title">SPECIAL CUT — ตัดแต่งพิเศษ</div>
+    ${stationHeaderHtml('sh-specialcut','🔪','SPECIAL CUT (ตัดแต่งพิเศษ)','รองรับ Bulk Import พร้อม Validate Product Code')}
     ${breadcrumbHtml('specialcut')}
     <div class="page-desc">บันทึกผลผลิตตัดแต่งพิเศษต่อ Product Code — ตรวจสอบกับ Product Master ก่อนบันทึกทุกครั้ง</div>
     ${formHtml}
@@ -1063,12 +1116,11 @@ async function renderFreezepackPage(){
       </div>
       <select id="fpStatus" style="max-width:200px;margin-top:6px;"><option>แช่แข็ง</option><option>บรรจุแล้ว</option></select>
       <div style="margin-top:12px;">${docUploadWidgetHtml('freezepack', null, 'รายงานแช่แข็ง/บรรจุ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitFreezepack()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitFreezepack()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">สายการผลิต</div>
-    <div class="page-title">FREEZE-PACK — แช่แข็งและบรรจุ</div>
+    ${stationHeaderHtml('sh-freezepack','📦','FREEZE-PACK (แช่แข็ง/บรรจุ)','บันทึกข้อมูลการแช่แข็งและบรรจุสินค้า')}
     ${breadcrumbHtml('freezepack')}
     <div class="page-desc">บันทึกข้อมูลการแช่แข็งและบรรจุสินค้า</div>
     ${formHtml}
@@ -1114,12 +1166,11 @@ async function renderCSPage(){
       </div>
       <select id="csStatus" style="max-width:200px;margin-top:6px;"><option>จัดเก็บ</option><option>เบิกแล้ว</option></select>
       <div style="margin-top:12px;">${docUploadWidgetHtml('cs', null, 'รายงานรับเข้า/สภาพห้องเย็น')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitCS()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitCS()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">สายการผลิต</div>
-    <div class="page-title">CS — ห้องเย็น</div>
+    ${stationHeaderHtml('sh-cs','🏢','CS (ห้องเย็น)','บันทึกข้อมูลการรับเข้า-จัดเก็บสินค้าในห้องเย็น')}
     ${breadcrumbHtml('cs')}
     <div class="page-desc">บันทึกข้อมูลการรับเข้า-จัดเก็บสินค้าในห้องเย็น</div>
     ${formHtml}
@@ -1165,12 +1216,11 @@ async function renderLoadPage(){
       <select id="loadStatus" style="max-width:200px;margin-top:6px;"><option>รอส่ง</option><option>จัดส่งแล้ว</option></select>
       <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="loadNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('load', null, 'ใบส่งของ/เอกสารขนส่ง')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitLoad()">บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitLoad()">💾 บันทึกข้อมูล</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">สายการผลิต</div>
-    <div class="page-title">LOAD — จัดส่ง</div>
+    ${stationHeaderHtml('sh-load','🚚','LOAD (จัดส่ง)','บันทึกข้อมูลการจัดส่งสินค้าให้ลูกค้า')}
     ${breadcrumbHtml('load')}
     <div class="page-desc">บันทึกข้อมูลการจัดส่งสินค้าให้ลูกค้า</div>
     ${formHtml}
@@ -1208,12 +1258,11 @@ async function renderFarmMasterPage(){
         <div class="field"><label>เบอร์ติดต่อ</label><input type="text" id="fmPhone"></div>
       </div>
       <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13.5px;"><input type="checkbox" id="fmActive" checked> Active</label>
-      <button class="btn" style="margin-top:10px;" onclick="saveFarmMaster()">บันทึก</button>
+      <button class="btn" style="margin-top:10px;" onclick="saveFarmMaster()">💾 บันทึก</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">Master Data</div>
-    <div class="page-title">Farm Master</div>
+    ${stationHeaderHtml('sh-master','🏡','Farm Master','รายชื่อฟาร์มทั้งหมด — ใช้เลือกในหน้า FARM และ LB')}
     <div class="page-desc">รายชื่อฟาร์มทั้งหมด — ใช้เลือกในหน้า FARM และ LB</div>
     ${formHtml}
     <div class="card"><div class="card-title">Farm ทั้งหมด (${farms.length})</div>
@@ -1254,13 +1303,12 @@ async function renderProductMasterPage(){
         <div class="field"><label>ประเภทสินค้า</label><select id="pmProductType"><option value="">-- ยังไม่ระบุ --</option><option value="Chill">Chill (แช่เย็น)</option><option value="Freeze">Freeze (แช่แข็ง)</option></select></div>
       </div>
       <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13.5px;"><input type="checkbox" id="pmActive" checked> Active</label>
-      <button class="btn" style="margin-top:10px;" onclick="saveProductMaster()">บันทึก</button>
+      <button class="btn" style="margin-top:10px;" onclick="saveProductMaster()">💾 บันทึก</button>
       <button class="btn btn-ghost" style="margin-top:10px;" onclick="renderProductMasterPage()">ล้างฟอร์ม</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">Master Data</div>
-    <div class="page-title">Product Master</div>
+    ${stationHeaderHtml('sh-master','📦','Product Master','ใช้ Validate ตอนบันทึกที่ Cut Up และ Special Cut')}
     <div class="page-desc">รายการ Product Code ทั้งหมด — ใช้ Validate ตอนบันทึกที่ Cut Up และ Special Cut</div>
     ${formHtml}
     <div class="card"><div class="card-title">Product ทั้งหมด (${products.length})</div>
@@ -1300,8 +1348,7 @@ async function renderEmployeesPage(){
     <td><button class="btn btn-ghost btn-sm" onclick="toggleEmployeeActive('${e.id}', ${!e.active})">${e.active?'ปิดใช้งาน':'เปิดใช้งาน'}</button></td>
   </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีผู้ใช้งาน</div></td></tr>`;
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">Admin</div>
-    <div class="page-title">จัดการผู้ใช้งาน</div>
+    ${stationHeaderHtml('sh-admin','👥','จัดการผู้ใช้งาน','PIN เริ่มต้นของผู้ใช้งานใหม่ทุกคนคือ 12345678')}
     <div class="page-desc">PIN เริ่มต้นของผู้ใช้งานใหม่ทุกคนคือ 12345678 — ระบบจะบังคับให้ตั้ง PIN ใหม่ทันทีที่ Login ครั้งแรก</div>
     <div class="card">
       <div class="card-title">สร้างผู้ใช้งานใหม่</div>
@@ -1313,7 +1360,7 @@ async function renderEmployeesPage(){
           <option value="AUDITOR">Auditor (อ่านอย่างเดียว)</option><option value="ADMIN">Admin</option>
         </select></div>
       </div>
-      <button class="btn" style="margin-top:10px;" onclick="createEmployee()">สร้างผู้ใช้งาน</button>
+      <button class="btn" style="margin-top:10px;" onclick="createEmployee()">➕ สร้างผู้ใช้งาน</button>
       <div id="empCreateMsg" style="margin-top:10px;font-size:13px;"></div>
     </div>
     <div class="card"><div class="card-title">ผู้ใช้งานทั้งหมด (${list.length})</div>
@@ -1339,8 +1386,7 @@ async function renderAuditLogPage(){
     <td>${l.entity_type||'-'} ${l.entity_id?`<div style="font-family:monospace;font-size:11px;color:var(--ink-soft);">${l.entity_id}</div>`:''}</td></tr>`).join('')
     || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Log</div></td></tr>`;
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">Admin</div>
-    <div class="page-title">Audit Log</div>
+    ${stationHeaderHtml('sh-admin','📜','Audit Log','บันทึกทุก action ในระบบ (ล่าสุด 300 รายการ)')}
     <div class="page-desc">บันทึกทุก action ในระบบ (ล่าสุด 300 รายการ)</div>
     <div class="card"><table><thead><tr><th>เวลา</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>Action</th><th>Entity</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
