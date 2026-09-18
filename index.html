@@ -521,6 +521,12 @@ async function renderDashboard(){
   `;
 }
 
+function farmNameFor(farmId, farms){
+  if(!farmId) return '-';
+  const f = (farms||[]).find(x=>x.farm_id===farmId);
+  return f ? f.farm_name : farmId;
+}
+
 /* ================= FARM ================= */
 async function renderFarmPage(){
   setLoading();
@@ -528,7 +534,7 @@ async function renderFarmPage(){
   try{ [rows, farms] = await Promise.all([apiListFarmDispatch(), apiListFarmMaster()]); }
   catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
   const farmOptions = farms.map(f=>`<option value="${f.farm_id}">${f.farm_id} — ${f.farm_name}</option>`).join('');
-  const tableRows = rows.map(r=>`<tr><td>${r.dispatch_date}</td><td>${r.farm_id||'-'}</td><td>${r.house||'-'}</td><td>${r.bird_count||'-'}</td>
+  const tableRows = rows.map(r=>`<tr><td>${r.dispatch_date}</td><td>${farmNameFor(r.farm_id, farms)}</td><td>${r.house||'-'}</td><td>${r.bird_count||'-'}</td>
     <td>${r.status==='ส่งแล้ว'?'<span class="badge badge-pass">ส่งแล้ว</span>':'<span class="badge badge-warn">รอส่ง</span>'}</td></tr>`).join('')
     || `<tr><td colspan="5"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
@@ -663,7 +669,7 @@ async function renderLBPage(searchLot){
 
   const tableRows = rows.map(r=>`<tr>
     <td>${r.received_date}</td><td class="lotcode">${r.lb_lot_code}</td><td>${r.sublot}</td>
-    <td>${r.farm_id||'-'}</td><td>${r.house||'-'}</td><td>${r.flock_batch||'-'}</td>
+    <td>${farmNameFor(r.farm_id, farms)}</td><td>${r.house||'-'}</td><td>${r.flock_batch||'-'}</td>
     <td>${r.received_qty}</td><td>${r.avg_weight_kg||'-'}</td><td>${r.dead_on_arrival_qty||0}</td>
     <td>${r.head_weight_kg??'-'} (${r.head_pct??6}%)</td><td>${r.feather_weight_kg??'-'} (${r.feather_pct??4}%)</td>
   </tr>`).join('') || `<tr><td colspan="11"><div class="empty-state">${searchLot?`ไม่พบ Lot ที่ตรงกับ "${searchLot}"`:'ยังไม่มีข้อมูล'}</div></td></tr>`;
@@ -819,11 +825,11 @@ async function fetchLBForEVI(){
   const infoEl=document.getElementById('eviLbInfo');
   if(!lot||!sublot){ infoEl.innerHTML=`<div class="err-banner">กรุณากรอก LB Lot และ Sublot</div>`; return; }
   try{
-    const rows = await apiListLB(lot, sublot);
+    const [rows, farms] = await Promise.all([apiListLB(lot, sublot), apiListFarmMaster()]);
     const match = rows.find(r=>r.lb_lot_code===lot && r.sublot===sublot);
     if(!match){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ LB Lot ${lot} / Sublot ${sublot}</div>`; window._eviLbData=null; return; }
     window._eviLbData = match;
-    infoEl.innerHTML = `<div class="note-banner">พบข้อมูล: ฟาร์ม ${match.farm_id||'-'} / เล้า ${match.house||'-'} / Flock ${match.flock_batch||'-'} / จำนวนรับ ${match.received_qty} ตัว / ตายทั้งหมด ${match.dead_on_arrival_qty||0} ตัว / น้ำหนักไก่เป็นรวม ${((match.avg_weight_kg||0)*match.received_qty).toFixed(1)} kg</div>`;
+    infoEl.innerHTML = `<div class="note-banner">พบข้อมูล: ฟาร์ม ${farmNameFor(match.farm_id, farms)} / เล้า ${match.house||'-'} / Flock ${match.flock_batch||'-'} / จำนวนรับ ${match.received_qty} ตัว / ตายทั้งหมด ${match.dead_on_arrival_qty||0} ตัว / น้ำหนักไก่เป็นรวม ${((match.avg_weight_kg||0)*match.received_qty).toFixed(1)} kg</div>`;
     document.getElementById('eviEnteringSlaughter').value = match.received_qty - (match.dead_on_arrival_qty||0);
     recalcEVI();
     recalcEVIIntestine();
@@ -873,12 +879,13 @@ async function submitEVI(){
 window._chillerEviData = null;
 async function renderChillerPage(){
   setLoading();
-  let rows;
-  try{ rows = await apiListChiller(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  let rows, farms;
+  try{ [rows, farms] = await Promise.all([apiListChiller(), apiListFarmMaster()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
 
   const tableRows = rows.map(r=>`<tr>
-    <td class="lotcode">${r.evi_lot_code}</td><td>${r.sublot}</td><td>${r.farm_id||'-'}</td>
+    <td class="lotcode">${r.evi_lot_code}</td><td>${r.sublot}</td><td>${farmNameFor(r.farm_id, farms)}</td>
     <td>${r.entering_qty??'-'}</td><td>${r.exit_time||'-'}</td><td>${r.exit_qty??'-'}</td>
     <td>${r.to_wholebird_qty??'-'}</td><td>${r.to_cutup_qty??'-'}</td><td>${r.temp_c??'-'}</td>
   </tr>`).join('') || `<tr><td colspan="9"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
