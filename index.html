@@ -3,11 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ระบบทวนสอบย้อนกลับไก่เนื้อ (Event-Sourcing Engine)</title>
+<title>Poultry Traceability System — Daily Data User</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -16,7 +15,7 @@
     --amber-700:#854F0B; --amber-500:#BA7517; --amber-100:#FAEEDA;
     --gray-500:#888780; --gray-100:#F1EFE8;
     --red-600:#A32D2D; --red-100:#FCEBEB; --green-700:#27500A; --green-100:#EAF3DE;
-    --purple-700:#4A3F9E; --purple-100:#EBE8FB;
+    --blue-700:#1D4ED8; --blue-100:#DBEAFE;
     --radius:10px;
   }
   *{box-sizing:border-box;}
@@ -43,10 +42,9 @@
   .btn-ghost:hover{background:var(--gray-100);color:var(--ink);}
   .btn-sm{padding:7px 12px;font-size:13px;}
   .btn-danger{background:var(--red-600);}
-  .btn-danger:hover{background:#7a1f1f;}
   #appScreen{display:none;min-height:100vh;}
   .app-shell{display:flex;min-height:100vh;}
-  .sidebar{width:260px;flex-shrink:0;background:var(--teal-900);color:#EDEEE8;padding:22px 14px;display:flex;flex-direction:column;overflow-y:auto;}
+  .sidebar{width:250px;flex-shrink:0;background:var(--teal-900);color:#EDEEE8;padding:22px 14px;display:flex;flex-direction:column;overflow-y:auto;}
   .brand{padding:0 10px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:6px;}
   .brand-name{font-weight:700;font-size:15px;}
   .brand-sub{font-size:11px;color:#8FBBB0;margin-top:2px;}
@@ -61,71 +59,62 @@
   .role-chip{font-size:12px;color:#B9CFC8;margin-bottom:2px;}
   .role-chip b{color:#fff;}
   .user-chip{font-size:11px;color:#8FBBB0;margin-bottom:8px;}
-  .main{flex:1;padding:30px 40px;max-width:1180px;}
+  .main{flex:1;padding:26px 36px;max-width:1220px;}
   .page-eyebrow{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--teal-700);}
-  .page-title{font-size:24px;font-weight:700;margin:4px 0 4px;}
-  .page-desc{font-size:14px;color:var(--ink-soft);margin-bottom:22px;max-width:720px;line-height:1.6;}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;margin-bottom:20px;}
-  .card-title{font-size:15px;font-weight:700;margin-bottom:14px;}
-  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;}
-  .form-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px 16px;}
+  .page-title{font-size:23px;font-weight:700;margin:4px 0 4px;}
+  .page-desc{font-size:13.5px;color:var(--ink-soft);margin-bottom:20px;max-width:760px;line-height:1.6;}
+  .breadcrumb{display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+  .breadcrumb .crumb{padding:6px 12px;border-radius:8px;font-size:12.5px;font-weight:600;background:var(--gray-100);color:var(--ink-soft);}
+  .breadcrumb .crumb.active{background:var(--teal-700);color:#fff;}
+  .breadcrumb .arrow{color:var(--gray-500);font-size:12px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;margin-bottom:18px;}
+  .card-title{font-size:14.5px;font-weight:700;margin-bottom:12px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+  .form-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px 16px;}
+  .form-grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px 16px;}
   .form-grid .field.full{grid-column:1/-1;}
-  table{width:100%;border-collapse:collapse;font-size:13.5px;}
-  th{text-align:left;font-weight:600;color:var(--ink-soft);font-size:12px;text-transform:uppercase;letter-spacing:.03em;padding:8px 10px;border-bottom:2px solid var(--line);}
-  td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  .calc-field{background:var(--green-100);border-color:var(--green-700);}
+  .calc-note{font-size:11px;color:var(--green-700);margin-top:3px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-weight:600;color:var(--ink-soft);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px 9px;border-bottom:2px solid var(--line);white-space:nowrap;}
+  td{padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top;}
   tr:last-child td{border-bottom:none;}
-  .lotcode{font-weight:700;color:var(--teal-900);cursor:pointer;}
-  .lotsub{font-size:11.5px;color:var(--ink-soft);font-family:monospace;}
-  .badge{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px;margin:1px 3px 1px 0;}
+  .badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;margin:1px 3px 1px 0;white-space:nowrap;}
   .badge-pass{background:var(--green-100);color:var(--green-700);}
   .badge-fail{background:var(--red-100);color:var(--red-600);}
-  .badge-ccp{background:var(--amber-100);color:var(--amber-700);}
-  .badge-fg{background:var(--purple-100);color:var(--purple-700);}
-  .src-tag{display:inline-block;font-size:12px;background:var(--teal-100);color:var(--teal-700);padding:2px 7px;border-radius:6px;margin:1px 3px 1px 0;cursor:pointer;}
-  .empty-state{padding:30px 10px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
-  .grid-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
-  .stat-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;cursor:pointer;transition:border-color .15s, transform .1s;}
-  .stat-card:hover{border-color:var(--teal-500);transform:translateY(-1px);}
-  .stat-card .num{font-size:26px;font-weight:700;color:var(--teal-900);}
-  .stat-card .lbl{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
-  .trace-search{display:flex;gap:10px;margin-bottom:20px;}
-  .trace-search input{flex:1;}
-  .trace-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-  .trace-col h4{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);margin:0 0 10px;}
-  .trace-node{border-left:3px solid var(--teal-500);background:var(--card);border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:8px;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line);}
-  .trace-node.self{border-left-color:var(--amber-500);background:var(--amber-100);}
-  .trace-node.fg{border-left-color:var(--purple-700);}
-  .trace-node .st{font-size:11.5px;color:var(--ink-soft);}
-  .trace-node .code{font-weight:700;font-size:14px;}
-  .note-banner{background:var(--teal-100);color:var(--teal-900);border-radius:8px;padding:12px 16px;font-size:13.5px;margin-bottom:18px;}
-  .warn-banner{background:var(--amber-100);color:var(--amber-700);border-radius:8px;padding:12px 16px;font-size:13.5px;margin-bottom:18px;}
+  .badge-warn{background:var(--amber-100);color:var(--amber-700);}
+  .badge-info{background:var(--blue-100);color:var(--blue-700);}
+  .empty-state{padding:26px 10px;text-align:center;color:var(--ink-soft);font-size:13px;}
+  .grid-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .stat-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;cursor:pointer;transition:border-color .15s;}
+  .stat-card:hover{border-color:var(--teal-500);}
+  .stat-card .num{font-size:22px;font-weight:700;color:var(--teal-900);}
+  .stat-card .lbl{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .readonly-banner{background:var(--blue-100);color:var(--blue-700);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;}
   .err-banner{background:var(--red-100);color:var(--red-600);border-radius:8px;padding:12px 16px;font-size:13.5px;margin-bottom:18px;}
-  .readonly-banner{background:var(--purple-100);color:var(--purple-700);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;}
-  .lotpill{display:inline-flex;flex-direction:column;font-family:monospace;background:var(--teal-100);color:var(--teal-900);border-radius:6px;padding:6px 10px;font-size:12.5px;}
-  details.docbox{margin:0;}
-  details.docbox summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--teal-700);list-style:none;display:flex;align-items:center;gap:5px;}
-  details.docbox summary::before{content:'▸';font-size:10px;}
-  details.docbox[open] summary::before{content:'▾';}
-  details.docbox summary::-webkit-details-marker{display:none;}
-  .doclist{max-height:260px;overflow-y:auto;margin-top:8px;min-width:280px;border:1px solid var(--line);border-radius:8px;background:var(--gray-100);}
-  .doc-item{display:flex;align-items:flex-start;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:12.5px;}
-  .doc-item:last-child{border-bottom:none;}
-  .doc-name{font-weight:600;color:var(--ink);display:block;}
-  .doc-meta{color:var(--ink-soft);font-size:11px;display:block;margin-top:1px;}
-  .source-box{border:1px dashed var(--line);border-radius:8px;padding:12px 14px;background:var(--gray-100);max-height:220px;overflow-y:auto;}
-  .source-item{display:flex;align-items:center;gap:8px;font-size:13.5px;padding:4px 0;}
-  .out-row-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr 0.7fr 0.7fr 0.7fr 1fr 40px;gap:8px;align-items:center;margin-bottom:6px;}
-  .out-row-grid input, .out-row-grid select{padding:6px 8px;font-size:12.5px;}
-  .out-row-error{border-color:var(--red-600) !important;background:var(--red-100);}
+  .note-banner{background:var(--teal-100);color:var(--teal-900);border-radius:8px;padding:12px 16px;font-size:13.5px;margin-bottom:18px;}
+  .line-item-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1.4fr 40px;gap:8px;align-items:center;margin-bottom:6px;}
+  .line-item-row input, .line-item-row select{padding:7px 9px;font-size:12.5px;}
   .grid-head{font-size:11px;color:var(--ink-soft);text-transform:uppercase;font-weight:600;}
+  .dropzone{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;background:var(--gray-100);cursor:pointer;transition:border-color .15s;}
+  .dropzone:hover, .dropzone.dragover{border-color:var(--teal-500);background:var(--teal-100);}
+  .dropzone .icon{font-size:28px;margin-bottom:6px;}
+  .doc-list-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;}
+  .doc-list-item:last-child{border-bottom:none;}
+  .doc-list-item .file-icon{font-size:18px;}
+  .doc-list-item .file-name{font-weight:600;flex:1;}
+  .doc-list-item .file-meta{color:var(--ink-soft);font-size:11px;}
+  .tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:16px;}
+  .tab-btn{padding:9px 16px;font-size:13.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;}
+  .tab-btn.active{color:var(--teal-700);border-bottom-color:var(--teal-700);}
 </style>
 </head>
 <body>
 <div id="loginScreen">
   <div class="login-card">
-    <div class="login-eyebrow">Traceability System v2 · Event-Sourcing</div>
+    <div class="login-eyebrow">Poultry Traceability System</div>
     <div class="login-title">เข้าสู่ระบบ</div>
-    <div class="login-sub">ระบบทวนสอบย้อนกลับผลิตภัณฑ์ไก่เนื้อ — Trace Engine ใหม่</div>
+    <div class="login-sub">Module 1 — Daily Data User (บันทึกข้อมูลประจำวันแต่ละแผนก)</div>
     <div class="field"><label for="loginCode">รหัสพนักงาน</label><input type="text" id="loginCode" placeholder="เช่น QC1032" autocomplete="username"></div>
     <div class="field"><label for="loginPin">PIN</label><input type="password" id="loginPin" placeholder="รหัส PIN" autocomplete="current-password"></div>
     <div class="login-error" id="loginError"></div>
@@ -148,7 +137,7 @@
 <div id="appScreen">
   <div class="app-shell">
     <div class="sidebar">
-      <div class="brand"><div class="brand-name">Traceability v2</div><div class="brand-sub">Event-Sourcing Trace Engine</div></div>
+      <div class="brand"><div class="brand-name">Poultry Traceability</div><div class="brand-sub">Module 1: Daily Data User</div></div>
       <div id="navContainer"></div>
       <div class="sidebar-footer">
         <div class="role-chip">บทบาท: <b id="roleDisplay"></b></div>
@@ -170,50 +159,6 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let session = null;
 const ROLE_LABEL = {ADMIN:'Admin (ผู้ดูแลระบบ)', AUDITOR:'Auditor (อ่านอย่างเดียว)', QA:'QA / Manager', QC:'QC / PRD'};
 
-/* ================= GOOGLE DRIVE (อัปโหลดรูปแทนการเก็บใน Supabase Storage) ================= */
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
-const DRIVE_FOLDER_ID = 'YOUR_SHARED_DRIVE_FOLDER_ID';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const DRIVE_SHARE_PERMISSION = {role:'reader', type:'anyone'};
-let gDriveAccessToken = null, gTokenClient = null;
-function ensureGoogleTokenClient(){
-  if(gTokenClient) return gTokenClient;
-  gTokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: DRIVE_SCOPE, callback: '' });
-  return gTokenClient;
-}
-function getDriveAccessToken(forceConsent){
-  return new Promise((resolve, reject)=>{
-    if(typeof google==='undefined' || !google.accounts){ reject(new Error('GOOGLE_SDK_NOT_LOADED')); return; }
-    const client = ensureGoogleTokenClient();
-    client.callback = (resp)=>{ if(resp.error){ reject(resp); return; } gDriveAccessToken = resp.access_token; resolve(resp.access_token); };
-    if(gDriveAccessToken && !forceConsent){ resolve(gDriveAccessToken); return; }
-    client.requestAccessToken({ prompt: forceConsent ? 'consent' : '' });
-  });
-}
-async function uploadPhotoToDrive(file, labelPrefix){
-  let token = await getDriveAccessToken(false);
-  const doUpload = async (tk)=>{
-    const metadata = { name: `${labelPrefix}_${Date.now()}_${file.name}`, parents: [DRIVE_FOLDER_ID] };
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], {type:'application/json'}));
-    form.append('file', file);
-    return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
-      method:'POST', headers:{ Authorization:`Bearer ${tk}` }, body: form,
-    });
-  };
-  let res = await doUpload(token);
-  if(res.status===401){ gDriveAccessToken=null; token = await getDriveAccessToken(true); res = await doUpload(token); }
-  if(!res.ok) throw new Error('DRIVE_UPLOAD_FAILED');
-  const data = await res.json();
-  try{
-    await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
-      method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
-      body: JSON.stringify(DRIVE_SHARE_PERMISSION),
-    });
-  }catch(e){}
-  return data.webViewLink;
-}
-
 async function rpc(fnName, params){
   const { data, error } = await sb.rpc(fnName, params);
   if(error){ console.error(fnName, error); throw error; }
@@ -223,6 +168,7 @@ function canWrite(){ return !!session && (session.role==='QC' || session.role===
 function isAdmin(){ return !!session && session.role==='ADMIN'; }
 function setLoading(msg){ document.getElementById('mainContent').innerHTML = `<div class="empty-state" style="padding:60px 0;">${msg||'กำลังโหลดข้อมูล...'}</div>`; }
 function renderErrorState(msg){ document.getElementById('mainContent').innerHTML = `<div class="err-banner">${msg}</div>`; }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
 
 /* ================= AUTH ================= */
 let pendingSession = null;
@@ -296,296 +242,162 @@ window.addEventListener('DOMContentLoaded', ()=>{
   if(saved){ try{ session=JSON.parse(saved); enterApp(); }catch(e){} }
 });
 
-/* ================= MASTERLIST เอกสารจริงต่อ Station (88 รายการ — คงไว้จาก v1) ================= */
-const STATION_DOCS = {
-  farm: [
-    {no:'1', name:`ใบรับส่งลูกไก่และใบตรวจสอบคุณภาพลูกไก่`, formNo:'FR-CH-02-005', fmt:'กระดาษตั๋ว', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'2', name:`ใบหน้าเล้า`, formNo:'FR-EXT-03-003', fmt:'Excel', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'3', name:`การตรวจสอบการทำงานในโรงเรือนไก่ (แบบ 2)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'4', name:`ใบวัคซีน+Cer วัคซีน`, formNo:'FR-EXT-03-012', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'5', name:`บันทึกสัตวพาหะ`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'6', name:`ใบชั่งขายอาหารไก่ + ตั๋วส่งอาหารไก่`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'7', name:`COA อาหารไก่ ได้แก่ ผล% ไขมัน โปรตีน ในอาหาร, ผลจุลินทรีย์`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'8', name:`ใบขึ้นทะเบียนอาหารสัตว์`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'9', name:`ร.3 ลูกไก่มาฟาร์ม`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'10', name:`ผลจุลินทรีย์ พื้น ตะกร้า คอลโซล รถส่งลูกไก่`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'11', name:`ผล NDAI ลูกไก่`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'12', name:`ใบรับรองว่าลูกไก่มาจากโรงฟักไหน`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'13', name:`ผลน้ำประจำปี`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'14', name:`ใบเตรียมโรงเรือน`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-  receiving: [
-    {no:'15', name:`คิวไก่`, formNo:'FR-RM-01-012', fmt:'Excel', erp:'มี', mb:'ใช้', qdoc:'ใช้'},
-    {no:'16', name:`สพส.001`, formNo:'BLSC 001', fmt:'Ecertify กรมปศุสัตว์', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'17', name:`ใบเคลื่อนย้าย (ร.3)`, formNo:'BLSC 002', fmt:'Ecertify กรมปศุสัตว์', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'18', name:`ใบมาตรฐานฟาร์ม (GAP)`, formNo:'BLSC 003', fmt:'Ecertify กรมปศุสัตว์', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'19', name:`ผลแลป ND/AI ที่ฟาร์ม`, formNo:'ใบตอบผลแลป', fmt:'Ecertify กรมปศุสัตว์', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'20', name:`Boot swab`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'21', name:`MA`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'22', name:`รายงาน Ante-Mortem`, formNo:'FR-QRM-01-007', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'23', name:`รายงาน Animal welfare Check 1`, formNo:'FR-QRM-01-043', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'24', name:`รายงาน Animal welfare Check 2`, formNo:'FR-QRM-01-080', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'25', name:`รายงาน Animal welfare Check 3`, formNo:'FR-QRM-01-051', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'26', name:`รายงานการตรวจสอบปริมาณน้ำไหลล้นจากบ่อลวก และอุณหภูมิน้ำบ่อลวก`, formNo:'FR-QRM-01-004', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-  ],
-  evisceration: [
-    {no:'27', name:`แบบฟอร์มรายงานสรุปการส่งขาซี เข้า OH`, formNo:'FR-RM-01-083', fmt:'กระดาษ', erp:'มี', mb:'ใช้', qdoc:''},
-    {no:'28', name:`รายงานรอบการส่งกึ๋นล้างลอกให้ OH`, formNo:'FR-RM-01-075', fmt:'กระดาษ', erp:'มี', mb:'ใช้', qdoc:''},
-    {no:'29', name:`รายงานสินค้าตก-เกิน plant ประจำวันห้องล้วง`, formNo:'FR-RM-01-141', fmt:'กระดาษ', erp:'มี', mb:'ใช้', qdoc:''},
-    {no:'30', name:`สมุดบันทึกข้อมูลการรับกึ๋นจากห้องล้วงของแผนก OH`, formNo:'FR-RM-01-075', fmt:'กระดาษ', erp:'มี', mb:'ใช้', qdoc:''},
-    {no:'31', name:`การตรวจซากไก่ประจำวัน`, formNo:'FR-QRM-01-021', fmt:'Excel', erp:'ไม่มี', mb:'ใช้', qdoc:''},
-    {no:'32', name:`รายงานการตรวจประสิทธิภาพเครื่อง Cropping`, formNo:'FR-QRM-01-021', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'33', name:`รายงาน CCP 1`, formNo:'FR-QRM-01-030', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'IVQF-5', name:`รายงานการแยก Sublot OH (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-  chiller: [
-    {no:'34', name:`บันทึกการจัดแยก Lot`, formNo:'FR-CUT-01-069', fmt:'google sheet', erp:'มี', mb:'', qdoc:''},
-    {no:'35', name:`รายงานการตรวจสอบอุณหภูมิซากไก่`, formNo:'FR-QPT-01-027', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'36', name:`บันทึึกยอดการผลิตไก่ C / ไก่ไหว้เจ้า`, formNo:'FR-CUT-01-085', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'37', name:`รายงานการตรวจสอบอุณหภูมิกึ๋น`, formNo:'FR-QPT-01-125', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'38', name:`รายงานการตรวจสอบอุณหภูมิ China Product (Critical Limit อุณหภูมิปีก 3 ̊C )`, formNo:'FR-QPT-01-132', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'39', name:`รายงานการตรวจสอบอุณหภูมิขาซี`, formNo:'FR-QPT-01-119', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'40', name:`CCP 3. Metal detector performance inspection report (Chilled products)`, formNo:'FR-QPT-01-001', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'41', name:`รายงานการตรวจสอบค่าน้ำ Overflow ขาซี`, formNo:'FR-QPT-01-167', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'42', name:`รายงานการตรวจสอบค่าน้ำ Overflow กึน`, formNo:'FR-QPT-01-168', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'43', name:`รายงานการตรวจวัดอุณหภูมิน้ำต้น-น้ำปลายชิลเลอร์`, formNo:'FR-QPT-01-083', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'44', name:`รายงานการตรวจวัดอุณหภูมิน้ำต้น-น้ำปลายกึ๋น-ขาซี`, formNo:'FR-QPT-01-152', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'FLOW-1', name:`รายงานผลิตไก่ตัว OH (เพิ่มจาก Flow กระบวนการผลิต)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-  cutting: [
-    {no:'45', name:`รายงานการแยก SUB LOT รับส่ง SUB LOT`, formNo:'FR-CUT-01-002', fmt:'กระดาษ', erp:'มี', mb:'', qdoc:''},
-    {no:'46', name:`รายงานบันทึกผลผลิตสันใน`, formNo:'FR-CUT-01-121', fmt:'กระดาษ', erp:'', mb:'', qdoc:''},
-    {no:'47', name:`Report of temperature check`, formNo:'FR-QPT-01-019', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'48', name:`รายงานการตรวจวัดอุณหภูมิห้อง (Checking room temperature report)`, formNo:'FR-QPT-01-039', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-  ],
-  specialcut: [
-    {no:'49', name:`รายงานประสิทธิภาพประจำสายพาน แผนก SC/FL`, formNo:'FR-SC-01-122', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
-    {no:'50', name:`ใบรายงานประสิทธิภาพประจำสายพานแผนก SC-SBB`, formNo:'FR-SC-01-123', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
-    {no:'51', name:`ใบรายงานประสิทธิภาพประจำสายพานแผนก SC-SBL`, formNo:'FR-SC-01-118', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
-    {no:'52', name:`รายงานบันทึกข้อมูล ERP แผนก SC/SFW`, formNo:'FR-SC-01-074', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
-    {no:'53', name:`ผลผลิตแต่ละ Part`, formNo:'', fmt:'Excel', erp:'มี', mb:'', qdoc:''},
-    {no:'54', name:`รายงานการตรวจสอบคุณภาพการผลิตสินค้าปรุงรส`, formNo:'FR-QPT-01-032 Rev.07', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'55', name:`Product Specification check SMP`, formNo:'FR-QPT-01-036 Rev.03', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'56', name:`ตัวอย่าง sensory`, formNo:'FR-QA-01-038 Rev.00', fmt:'กระดาษ', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'57', name:`รายงานการตรวจเช็คสินค้า`, formNo:'FR-QPT-01-105 Rev.01', fmt:'กระดาษ', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'58', name:`รายงานยอดถุงแผนก SC`, formNo:'', fmt:'Excel', erp:'', mb:'', qdoc:''},
-    {no:'IVQF-4', name:`รายงานผลิตสิน BL (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-  bagprep: [
-    {no:'59', name:`รายงานการพิมพ์ถุงประจำวัน`, formNo:'FR-PKG-02-002', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'60', name:`รายงานการตรวจสอบการพิมพ์ถุง`, formNo:'FR-PAC-02-011', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'61', name:`รายงานการแจ้งเบิกถุงของผลิตกับ PKG`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'62', name:`รายงานการตรวจรับวัตถุดิบกล่อง`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'63', name:`รายงานการรับวัตถุดิบเข้า`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'IVQF-2', name:`รายงานการเบิกถุง IVQF (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-  freezing: [
-    {no:'64', name:`รายงานบันทึกผลผลิตสินค้าเข้าฟรีส`, formNo:'FR-PAC-01-052', fmt:'Excel', erp:'', mb:'', qdoc:''},
-    {no:'65', name:`รายงานบรรจุสินค้า`, formNo:'FR-PAC-03-002', fmt:'Excel', erp:'', mb:'', qdoc:''},
-    {no:'66', name:`CCP 3. : Metal detector performance inspection report (Chilled products)`, formNo:'FR-QPT-01-001 Rev.12', fmt:'google sheet', erp:'ไม่มี', mb:'', qdoc:''},
-    {no:'IVQF-1', name:`รายงานการบรรจุสินค้า IVQF (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-  boxing: [
-    {no:'67', name:`รายงาน Temperature Check`, formNo:'FR-QPD-01-013', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'68', name:`รายงานการตรวจวัดอุณหภูมิในห้องฟรีส`, formNo:'FR-QPD-01-032', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'69', name:`Packing Check`, formNo:'FR-QPD-01-004', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'70', name:`รายงานการตรวจสอบการพิมพ์กล่อง`, formNo:'FR-PAC-02-018', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'71', name:`รายงานตรวจสอบเครื่องตรวจจับโลหะ (สินค้าแช่แข็ง)`, formNo:'FR-QPD-01-005', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'72', name:`แบบฟอร์มสรุปยอดรวมสินค้า`, formNo:'FR-PAC-03-004', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'73', name:`แบบฟอร์มสรุปยอดรวม`, formNo:'FR-PAC-01-018', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'IVQF-3', name:`รายงานการเบิกกล่อง IVQF (เพิ่มจาก Flow IVQF)`, formNo:'', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-  coldstorage: [
-    {no:'74', name:`รายงานรับ-จ่ายสินค้า`, formNo:'FR-CS-01-042', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'75', name:`สมุดรายงานรับเข้าสินค้าแช่เย็น (CHILL)`, formNo:'FR-CS-01-038', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'76', name:`ฟอร์มตู้`, formNo:'FR-CS-01-032', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-  shipment: [
-    {no:'77', name:`รายงานตรวจสอบการขนถ่ายสินค้าแช่แข็ง`, formNo:'FR-QLD-01-001', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'78', name:`รายงานการขนถ่ายสินค้าแช่เย็น`, formNo:'FR-QLD-01-002', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'79', name:`รายงานตรวจสอบสภาพตู้บรรจุสินค้า`, formNo:'FR-QLD-01-006', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'80', name:`แบบสพส.1 หนังสือรับรองการตรวจเนื้อสัตว์/ผลิตภัณฑ์สัตว์ส่งออกต่างประเทศ  แบบ สพส.2 หนังสือรับรองการตรวจเนื้อสัตว์/ผลิตภัณฑ์สัตว์เพื่อนำไปแปรรูปส่งออกต่างประเทศ  แบบ สพส.4 หนังสือรับรองการตรวจเนื้อสัตว์/ผลิตภัณฑ์สัตว์ ผลแลป MA, Micro, ND/AI,PR, E.coli. Listeria ****ตามข้อกำหนดแต่ละประเทศ`, formNo:'', fmt:'PDF', erp:'', mb:'', qdoc:''},
-    {no:'81', name:`รายงานรับ-จ่ายสินค้า`, formNo:'FR-CS-01-042', fmt:'', erp:'', mb:'', qdoc:''},
-    {no:'82', name:`Re. loading`, formNo:'FR-WD-01-039', fmt:'', erp:'', mb:'', qdoc:''},
-  ],
-};
+/* ================= SUPABASE STORAGE — อัปโหลดเอกสาร/รูปภาพจริง ================= */
+async function uploadFileToStorage(file, station, recordId){
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const path = `${station}/${recordId||'general'}/${Date.now()}_${safeName}`;
+  const { data, error } = await sb.storage.from('documents').upload(path, file, { cacheControl:'3600', upsert:false });
+  if(error) throw error;
+  return { storage_path: data.path, file_name: file.name, file_size: file.size };
+}
+function getPublicFileUrl(storagePath){
+  const { data } = sb.storage.from('documents').getPublicUrl(storagePath);
+  return data.publicUrl;
+}
+async function handleFileUpload(inputEl, station, recordId, docType){
+  const files = Array.from(inputEl.files||[]);
+  if(files.length===0) return;
+  const container = inputEl.closest('.card')?.querySelector('.doc-list-area');
+  for(const file of files){
+    try{
+      const meta = await uploadFileToStorage(file, station, recordId);
+      await rpc('rpc_create_document', {p_session_token:session.token, p_station:station, p_record_id:recordId||null, p_doc_type:docType||'เอกสารแนบ', p_file_name:meta.file_name, p_storage_path:meta.storage_path, p_file_size:meta.file_size, p_note:null});
+    }catch(e){ alert(`อัปโหลด ${file.name} ไม่สำเร็จ: ${e.message||'เกิดข้อผิดพลาด'}`); }
+  }
+  if(container) await refreshDocList(container, station, recordId);
+  inputEl.value = '';
+}
+function fileIcon(fileName){
+  const ext=(fileName.split('.').pop()||'').toLowerCase();
+  if(['jpg','jpeg','png','gif','webp'].includes(ext)) return '🖼️';
+  if(ext==='pdf') return '📕';
+  if(['xls','xlsx','csv'].includes(ext)) return '📊';
+  if(['doc','docx'].includes(ext)) return '📄';
+  return '📎';
+}
+async function refreshDocList(container, station, recordId){
+  container.innerHTML = `<div class="empty-state" style="padding:10px;">กำลังโหลด...</div>`;
+  try{
+    const docs = await rpc('rpc_list_documents', {p_session_token:session.token, p_station:station, p_record_id:recordId||null});
+    if(docs.length===0){ container.innerHTML = `<div class="empty-state" style="padding:10px;">ยังไม่มีเอกสารแนบ</div>`; return; }
+    container.innerHTML = docs.map(d=>`
+      <div class="doc-list-item">
+        <span class="file-icon">${fileIcon(d.file_name)}</span>
+        <span class="file-name">${d.file_name}</span>
+        <span class="file-meta">${d.doc_type||''} · ${new Date(d.uploaded_at).toLocaleString('th-TH')}</span>
+        <a href="${getPublicFileUrl(d.storage_path)}" target="_blank" class="btn btn-ghost btn-sm">เปิดดู</a>
+        ${canWrite()?`<button class="btn btn-ghost btn-sm" onclick="deleteDocument('${d.id}', this)">ลบ</button>`:''}
+      </div>`).join('');
+  }catch(e){ container.innerHTML = `<div class="empty-state" style="padding:10px;">โหลดไม่สำเร็จ</div>`; }
+}
+async function deleteDocument(docId, btnEl){
+  if(!confirm('ยืนยันลบเอกสารนี้?')) return;
+  try{
+    await rpc('rpc_delete_document', {p_session_token:session.token, p_document_id:docId});
+    const container = btnEl.closest('.doc-list-area');
+    const station = container.dataset.station, recordId = container.dataset.recordId;
+    await refreshDocList(container, station, recordId||null);
+  }catch(e){ alert('ลบไม่สำเร็จ'); }
+}
+function docUploadWidgetHtml(station, recordId, docType){
+  return `
+    <div class="dropzone" onclick="this.querySelector('input').click()"
+         ondragover="event.preventDefault();this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="event.preventDefault();this.classList.remove('dragover');handleFileUpload({files:event.dataTransfer.files, closest:(s)=>this.closest(s)}, '${station}', ${recordId?`'${recordId}'`:'null'}, '${docType||''}')">
+      <div class="icon">☁️</div>
+      <div>ลากไฟล์มาวางที่นี่ หรือ <b>คลิกเพื่อเลือกไฟล์</b></div>
+      <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">รองรับ: PDF, Excel, Word, JPG, PNG</div>
+      <input type="file" multiple style="display:none;" onchange="handleFileUpload(this,'${station}', ${recordId?`'${recordId}'`:'null'}, '${docType||''}')">
+    </div>
+    <div class="doc-list-area" data-station="${station}" data-record-id="${recordId||''}" style="margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--gray-100);"></div>`;
+}
+async function initDocWidget(cardEl, station, recordId){
+  const container = cardEl.querySelector('.doc-list-area');
+  if(container) await refreshDocList(container, station, recordId);
+}
 
-/* ================= Mapping: process_code (Engine ใหม่) -> กลุ่มเอกสาร Masterlist (v1) ================= */
-const PROCESS_TO_DOCGROUP = {
-  HATCH_RECEIVE_EGG:'farm', HATCH_INCUBATE:'farm', HATCH_DELIVER_CHICK:'farm',
-  FARM_RECEIVE_CHICK:'farm', FARM_REARING:'farm', FEED_USAGE:'farm', FARM_CATCH:'farm',
-  LB_RECEIVE:'receiving', EVI_PROCESS:'evisceration', EVI_BYPRODUCT:'evisceration',
-  CHILLER_PROCESS:'chiller', CUTUP_PROCESS:'cutting', CUTUP_FRAME:'cutting',
-  SC_BB:'specialcut', SC_BL:'specialcut', SC_FILLET:'specialcut', SC_WING:'specialcut',
-  BAGPREP:'bagprep', FREEZE:'freezing', PACK:'boxing', BOXING:'boxing',
-  CS_RECEIVE:'coldstorage', LOAD_SHIP:'shipment',
-  FURTHER_RECEIVE:'shipment', FURTHER_PREP:'specialcut', FURTHER_COOK:'freezing',
-  FURTHER_COOL:'freezing', FURTHER_PACK:'boxing', FURTHER_SHIP:'shipment',
-};
-function docGroupFor(processCode){ return PROCESS_TO_DOCGROUP[processCode] || null; }
+/* ================= API WRAPPERS ================= */
+// Farm / Feed / Hatchery
+async function apiListFarmMaster(){ return await rpc('rpc_list_farm_master', {p_session_token:session.token}); }
+async function apiUpsertFarmMaster(id,name,addr,phone,active){ return await rpc('rpc_upsert_farm_master', {p_session_token:session.token, p_farm_id:id, p_farm_name:name, p_address:addr||null, p_phone:phone||null, p_active:active}); }
+async function apiListFarmDispatch(date){ return await rpc('rpc_list_farm_dispatch', {p_session_token:session.token, p_date:date||null}); }
+async function apiCreateFarmDispatch(date,farmId,house,qty,status){ return await rpc('rpc_create_farm_dispatch', {p_session_token:session.token, p_date:date, p_farm_id:farmId, p_house:house, p_bird_count:qty, p_status:status}); }
+async function apiListFeed(date){ return await rpc('rpc_list_feed_receiving', {p_session_token:session.token, p_date:date||null}); }
+async function apiCreateFeed(date,material,qty,supplier,lotNo,status){ return await rpc('rpc_create_feed_receiving', {p_session_token:session.token, p_date:date, p_material:material, p_qty:qty, p_supplier:supplier, p_lot_no:lotNo, p_status:status}); }
+async function apiListHatchery(date){ return await rpc('rpc_list_hatchery', {p_session_token:session.token, p_date:date||null}); }
+async function apiCreateHatchery(date,breed,batchNo,qty,rate,farmDest,status){ return await rpc('rpc_create_hatchery', {p_session_token:session.token, p_date:date, p_breed:breed, p_batch_no:batchNo, p_qty:qty, p_rate:rate, p_farm_dest:farmDest, p_status:status}); }
 
-/* ================= API WRAPPERS: Master Data ================= */
-async function apiListProcessMaster(){ return await rpc('rpc_list_process_master', {p_session_token:session.token}); }
-async function apiUpsertProcessMaster(code,name,station,active){ return await rpc('rpc_upsert_process_master', {p_session_token:session.token, p_process_code:code, p_process_name:name, p_station:station, p_active:active}); }
+// LB
+async function apiListLB(lot,sublot){ return await rpc('rpc_list_lb', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
+async function apiCreateLB(date,farmId,house,flock,sublot,qty,avgWeight,doa,note){
+  return await rpc('rpc_create_lb', {p_session_token:session.token, p_date:date, p_farm_id:farmId, p_house:house, p_flock:flock, p_sublot:sublot, p_received_qty:qty, p_avg_weight:avgWeight, p_doa:doa, p_note:note});
+}
+// EVI
+async function apiListEVI(lot,sublot){ return await rpc('rpc_list_evi', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
+async function apiCreateEVI(lbLot,sublot,doa,condemn,partial,ccp1,note,byproducts){
+  return await rpc('rpc_create_evi', {p_session_token:session.token, p_lb_lot:lbLot, p_sublot:sublot, p_doa:doa, p_condemn:condemn, p_partial:partial, p_ccp1:ccp1, p_note:note, p_byproducts:byproducts});
+}
+async function apiListEVIByproducts(eviId){ return await rpc('rpc_list_evi_byproducts', {p_session_token:session.token, p_evi_record_id:eviId}); }
+
+// Chiller
+async function apiListChiller(lot,sublot){ return await rpc('rpc_list_chiller', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
+async function apiCreateChiller(eviLot,sublot,exitTime,exitQty,toWholebird,toCutup,temp,note){
+  return await rpc('rpc_create_chiller', {p_session_token:session.token, p_evi_lot:eviLot, p_sublot:sublot, p_exit_time:exitTime||null, p_exit_qty:exitQty, p_to_wholebird:toWholebird, p_to_cutup:toCutup, p_temp:temp, p_note:note});
+}
+// Cut Up
+async function apiListCutup(lot,sublot){ return await rpc('rpc_list_cutup', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
+async function apiListCutupProducts(cutupId){ return await rpc('rpc_list_cutup_products', {p_session_token:session.token, p_cutup_record_id:cutupId}); }
+async function apiCreateCutup(chillerLot,sublot,cutDate,note,products){
+  return await rpc('rpc_create_cutup', {p_session_token:session.token, p_chiller_lot:chillerLot, p_sublot:sublot, p_cut_date:cutDate, p_note:note, p_products:products});
+}
+// Special Cut
+async function apiListSpecialcut(lot,sublot){ return await rpc('rpc_list_specialcut', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
+async function apiListSpecialcutProducts(scId){ return await rpc('rpc_list_specialcut_products', {p_session_token:session.token, p_specialcut_record_id:scId}); }
+async function apiCreateSpecialcut(date,lot,sublot,part,rmWeight,status,note,products){
+  return await rpc('rpc_create_specialcut', {p_session_token:session.token, p_date:date, p_lot:lot, p_sublot:sublot, p_part:part, p_rm_weight:rmWeight, p_status:status, p_note:note, p_products:products});
+}
+// Freeze-Pack
+async function apiListFreezepack(lot){ return await rpc('rpc_list_freezepack', {p_session_token:session.token, p_lot:lot||null}); }
+async function apiCreateFreezepack(date,lot,sublot,freezer,weightIn,weightOut,status,note){
+  return await rpc('rpc_create_freezepack', {p_session_token:session.token, p_date:date, p_lot:lot, p_sublot:sublot, p_freezer:freezer, p_weight_in:weightIn, p_weight_out:weightOut, p_status:status, p_note:note});
+}
+// CS
+async function apiListCS(lot){ return await rpc('rpc_list_cs', {p_session_token:session.token, p_lot:lot||null}); }
+async function apiCreateCS(date,lot,sublot,part,weight,location,temp,status){
+  return await rpc('rpc_create_cs', {p_session_token:session.token, p_date:date, p_lot:lot, p_sublot:sublot, p_part:part, p_weight:weight, p_location:location, p_temp:temp, p_status:status});
+}
+// Load
+async function apiListLoad(customer){ return await rpc('rpc_list_load', {p_session_token:session.token, p_customer:customer||null}); }
+async function apiCreateLoad(date,customer,part,weight,truck,driver,status,note){
+  return await rpc('rpc_create_load', {p_session_token:session.token, p_date:date, p_customer:customer, p_part:part, p_weight:weight, p_truck:truck, p_driver:driver, p_status:status, p_note:note});
+}
+// Product Master (คงจาก v2)
 async function apiListProductMaster(){ return await rpc('rpc_list_product_master', {p_session_token:session.token}); }
 async function apiUpsertProductMaster(code,name,part,unit,productType,active){ return await rpc('rpc_upsert_product_master', {p_session_token:session.token, p_product_code:code, p_product_name:name, p_part:part, p_unit:unit, p_product_type:productType, p_active:active}); }
-async function apiListFarmHouseFlock(){ return await rpc('rpc_list_farm_house_flock', {p_session_token:session.token}); }
-async function apiUpsertFarmHouseFlock(farmId,houseId,flockId,flockDate,sublot,feedLot,breederFlock,hatcheryBatch){
-  return await rpc('rpc_upsert_farm_house_flock', {p_session_token:session.token, p_farm_id:farmId, p_house_id:houseId, p_flock_id:flockId, p_flock_date:flockDate, p_sublot:sublot, p_feed_lot:feedLot||null, p_breeder_flock:breederFlock||null, p_hatchery_batch:hatcheryBatch||null});
-}
-
-/* ================= API WRAPPERS: Trace Engine Core ================= */
-async function apiCreateTraceUnit(traceType,productCode,lot,sublot,productionDate){
-  return await rpc('rpc_create_trace_unit', {p_session_token:session.token, p_trace_type:traceType, p_product_code:productCode||null, p_lot:lot||null, p_sublot:sublot||null, p_production_date:productionDate});
-}
-async function apiCreateProductionEvent(eventDate, mainArea, processCode, shift, inputs, outputs, fields){
-  return await rpc('rpc_create_production_event', {p_session_token:session.token, p_event_date:eventDate, p_main_area:mainArea, p_process_code:processCode, p_shift:shift||null, p_inputs:inputs, p_outputs:outputs, p_fields:fields||{}, p_status:'CONFIRMED'});
-}
-async function apiResolveTraceUnits(lot,sublot,productCode,traceType){
-  return await rpc('rpc_resolve_trace_units', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null, p_product_code:productCode||null, p_trace_type:traceType||null});
-}
-async function apiTraceBackward(traceId){ return await rpc('rpc_trace_backward', {p_session_token:session.token, p_trace_id:traceId}); }
-async function apiTraceForward(traceId){ return await rpc('rpc_trace_forward', {p_session_token:session.token, p_trace_id:traceId}); }
-async function apiGetEventTimeline(traceId){ return await rpc('rpc_get_event_timeline', {p_session_token:session.token, p_trace_id:traceId}); }
-
-/* ================= API WRAPPERS: Attachment ================= */
-async function apiUpsertAttachment(eventId,traceId,documentType,fileName,filePath,note){
-  return await rpc('rpc_upsert_attachment', {p_session_token:session.token, p_event_id:eventId||null, p_trace_id:traceId||null, p_document_type:documentType, p_file_name:fileName||null, p_file_path:filePath, p_note:note||null});
-}
-async function apiListAttachments(eventId,traceId){ return await rpc('rpc_list_attachments', {p_session_token:session.token, p_event_id:eventId||null, p_trace_id:traceId||null}); }
-
-/* ================= API WRAPPERS: Employees / Audit / Doc Visibility (คงจาก v1) ================= */
+// Employees / Audit (คงจาก v1/v2)
 async function apiListEmployees(){ return await rpc('rpc_list_employees', {p_session_token:session.token}); }
 async function apiCreateEmployee(code,name,role){ return await rpc('rpc_create_employee', {p_session_token:session.token, p_employee_code:code, p_full_name:name, p_role:role}); }
 async function apiSetEmployeeActive(id,active){ return await rpc('rpc_set_employee_active', {p_session_token:session.token, p_employee_id:id, p_active:active}); }
 async function apiGetAuditLog(limit,code,action){ return await rpc('rpc_get_audit_log', {p_session_token:session.token, p_limit:limit||300, p_employee_code:code||null, p_action:action||null}); }
-async function apiSetDocVisibility(station, docNo, hidden){ return await rpc('rpc_set_doc_visibility', {p_session_token:session.token, p_station:station, p_doc_no:docNo, p_hidden:hidden}); }
-async function apiListDocVisibility(){ return await rpc('rpc_list_doc_visibility', {p_session_token:session.token}); }
-
-let docVisibilityCache = null;
-async function loadDocVisibility(force){
-  if(docVisibilityCache && !force) return docVisibilityCache;
-  try{
-    const rows = await apiListDocVisibility();
-    const m={}; rows.forEach(r=>{ m[r.station+'|'+r.doc_no]=true; });
-    docVisibilityCache = m;
-  }catch(e){ docVisibilityCache = {}; }
-  return docVisibilityCache;
-}
-function isDocHiddenSync(station, docNo){ return !!(docVisibilityCache && docVisibilityCache[station+'|'+docNo]); }
-async function visibleDocsFor(docGroupKey){
-  const all = STATION_DOCS[docGroupKey]||[];
-  if(session.role!=='AUDITOR') return all;
-  await loadDocVisibility();
-  return all.filter(d=>!isDocHiddenSync(docGroupKey, d.no));
-}
-function docMetaLine(d){
-  let parts=[];
-  if(d.formNo) parts.push(d.formNo);
-  parts.push(d.fmt||'ยังไม่ระบุรูปแบบ');
-  if(d.erp==='มี') parts.push('<span class="badge badge-pass">ERP</span>');
-  if(d.mb==='ใช้') parts.push('<span class="badge badge-ccp">Mass Balance</span>');
-  return parts.join(' · ');
-}
-
-/* ================= เอกสาร Masterlist ผูกกับ production_event (attachment) ================= */
-function isSheetLike(fmt){ const f=(fmt||'').toLowerCase(); return f.includes('google') || f.includes('excel') || f.includes('ecertify'); }
-async function fetchAttachmentMap(eventId){
-  if(!eventId) return {};
-  try{ const rows = await apiListAttachments(eventId, null); const m={}; rows.forEach(r=>{ if(r.document_type) m[r.document_type]=r; }); return m; }
-  catch(e){ return {}; }
-}
-function docItemHtml(docGroupKey, eventId, d, attachment){
-  const link = attachment ? (attachment.file_path||'') : '';
-  const done = !!link;
-  const statusBadge = done ? `<span class="badge badge-pass">แนบแล้ว</span>` : `<span class="badge badge-fail">ยังไม่แนบ</span>`;
-  let evidenceHtml;
-  if(isSheetLike(d.fmt)){
-    evidenceHtml = canWrite() ? `<div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
-        <input type="text" value="${link}" placeholder="วางลิงก์ Google Sheet / Excel Online ของเอกสารนี้" data-doc-link="${d.no}" style="flex:1;padding:6px 8px;font-size:12px;">
-        <button class="btn btn-ghost btn-sm" style="white-space:nowrap;" onclick="saveDocLink('${eventId}','${docGroupKey}','${d.no}')">บันทึกลิงก์</button>
-        ${link?`<a href="${link}" target="_blank" class="btn btn-ghost btn-sm" style="white-space:nowrap;">เปิดดู ↗</a>`:''}
-      </div>` :
-      (link ? `<div style="margin-top:6px;"><a href="${link}" target="_blank" class="btn btn-ghost btn-sm">เปิดดูเอกสาร ↗</a></div>` : `<div style="margin-top:6px;font-size:12px;color:var(--ink-soft);">ยังไม่มีการแนบเอกสาร</div>`);
-  } else {
-    const uploadBtn = canWrite() ? `<label class="btn btn-ghost btn-sm" style="cursor:pointer;white-space:nowrap;">📷 ถ่าย/แนบรูป → Google Drive
-        <input type="file" accept="image/*,application/pdf" capture="environment" style="display:none;" onchange="handleDrivePhoto(this,'${docGroupKey}','${eventId}','${d.no}')">
-      </label>` : '';
-    evidenceHtml = `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      ${uploadBtn}
-      ${link?`<a href="${link}" target="_blank" class="btn btn-ghost btn-sm">เปิดดูเอกสาร ↗</a>`:(canWrite()?'':`<span style="font-size:12px;color:var(--ink-soft);">ยังไม่มีการแนบเอกสาร</span>`)}
-    </div>`;
-  }
-  return `<div class="doc-item" id="docitem-${eventId}-${d.no}">
-    <div style="flex:1;">
-      <span class="doc-name">#${d.no} ${d.name} ${statusBadge}</span>
-      <span class="doc-meta">${docMetaLine(d)}</span>
-      ${evidenceHtml}
-    </div>
-  </div>`;
-}
-async function saveDocLink(eventId, docGroupKey, docNo){
-  const input = document.querySelector(`#docitem-${eventId}-${docNo} [data-doc-link="${docNo}"]`);
-  if(!input) return;
-  try{
-    await apiUpsertAttachment(eventId, null, docNo, null, input.value.trim(), null);
-    await refreshDocItem(docGroupKey, eventId, docNo);
-  }catch(e){ alert('บันทึกลิงก์ไม่สำเร็จ'); }
-}
-async function handleDrivePhoto(inputEl, docGroupKey, eventId, docNo){
-  const file = inputEl.files[0]; if(!file) return;
-  const itemEl = document.getElementById(`docitem-${eventId}-${docNo}`);
-  const originalHtml = itemEl ? itemEl.innerHTML : '';
-  if(itemEl) itemEl.innerHTML = `<div style="padding:10px 4px;font-size:12.5px;color:var(--ink-soft);">กำลังอัปโหลดขึ้น Google Drive...</div>`;
-  try{
-    const link = await uploadPhotoToDrive(file, `${docGroupKey}_${docNo}`);
-    await apiUpsertAttachment(eventId, null, docNo, file.name, link, null);
-    await refreshDocItem(docGroupKey, eventId, docNo);
-  }catch(e){
-    if(itemEl) itemEl.innerHTML = originalHtml;
-    alert('อัปโหลดขึ้น Google Drive ไม่สำเร็จ — ตรวจสอบการตั้งค่า Google Client ID/Folder ID');
-  }
-}
-async function refreshDocItem(docGroupKey, eventId, docNo){
-  const attMap = await fetchAttachmentMap(eventId);
-  const doc = (STATION_DOCS[docGroupKey]||[]).find(x=>x.no===docNo);
-  const el = document.getElementById(`docitem-${eventId}-${docNo}`);
-  if(el && doc) el.outerHTML = docItemHtml(docGroupKey, eventId, doc, attMap[docNo]);
-  await refreshDocSummary(eventId, docGroupKey);
-}
-async function refreshDocSummary(eventId, docGroupKey){
-  const docs = await visibleDocsFor(docGroupKey);
-  const attMap = await fetchAttachmentMap(eventId);
-  const done = docs.filter(d=>attMap[d.no] && attMap[d.no].file_path).length;
-  const el = document.getElementById(`docsum-${eventId}`);
-  if(el) el.textContent = `เอกสาร Masterlist (${done}/${docs.length} แนบแล้ว)`;
-}
-async function docDetailsHtml(docGroupKey, eventId){
-  if(!docGroupKey || !eventId) return '';
-  const docs = await visibleDocsFor(docGroupKey);
-  if(docs.length===0) return `<div class="empty-state" style="padding:14px;">ไม่มีรายการเอกสารของกลุ่มนี้ใน Masterlist</div>`;
-  const attMap = await fetchAttachmentMap(eventId);
-  const done = docs.filter(d=>attMap[d.no] && attMap[d.no].file_path).length;
-  const items = docs.map(d=>docItemHtml(docGroupKey, eventId, d, attMap[d.no])).join('');
-  return `<details class="docbox">
-    <summary id="docsum-${eventId}">เอกสาร Masterlist (${done}/${docs.length} แนบแล้ว)</summary>
-    <div class="doclist">${items}</div>
-  </details>`;
-}
 
 /* ================= NAV ================= */
 let currentPage='dashboard';
 function renderSidebar(){
   let h='';
-  h+=navGroup('ภาพรวม', [{key:'dashboard',name:'แดชบอร์ด',dot:'util'},{key:'trace',name:'Trace Query',dot:'util'}]);
-  h+=navGroup('บันทึกข้อมูลการผลิต', [{key:'recordevent',name:'บันทึก Event (ทุก Station)',dot:'util'}]);
-  h+=navGroup('Master Data', [
-    {key:'productmaster',name:'Product Master',dot:'util'},
-    {key:'processmaster',name:'Process Master',dot:'util'},
-    {key:'farmmaster',name:'Farm / House / Flock',dot:'util'},
+  h+=navGroup('ภาพรวม', [{key:'dashboard',name:'หน้าหลัก',dot:'util'}]);
+  h+=navGroup('ต้นน้ำ', [
+    {key:'farm',name:'FARM (ฟาร์ม)'},{key:'feed',name:'FEED (อาหารสัตว์)'},{key:'hatchery',name:'HATCHERY (โรงฟัก)'},
   ]);
+  h+=navGroup('สายการผลิต', [
+    {key:'lb',name:'LB (รับไก่เป็น)'},{key:'evi',name:'EVI (ล้วงเครื่องใน)'},
+    {key:'chiller',name:'CHILLER-OH (ลดอุณหภูมิซาก)'},{key:'cutup',name:'CUT UP (ชำแหละ)'},
+    {key:'specialcut',name:'SPECIAL CUT (ตัดแต่งพิเศษ)'},{key:'freezepack',name:'FREEZE-PACK (แช่แข็ง/บรรจุ)'},
+    {key:'cs',name:'CS (ห้องเย็น)'},{key:'load',name:'LOAD (จัดส่ง)'},
+  ]);
+  h+=navGroup('Master Data', [{key:'farmmaster',name:'Farm Master'},{key:'productmaster',name:'Product Master'}]);
   if(isAdmin()){
-    h+=navGroup('Admin', [{key:'employees',name:'จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'Audit Log',dot:'admin'},{key:'docvisibility',name:'ซ่อนเอกสารจาก Auditor',dot:'admin'}]);
+    h+=navGroup('Admin', [{key:'employees',name:'จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'Audit Log',dot:'admin'}]);
   }
   document.getElementById('navContainer').innerHTML=h;
 }
@@ -595,423 +407,835 @@ function navGroup(label, items){
   return h;
 }
 function navigateTo(key){
-  if(['employees','auditlog','docvisibility'].includes(key) && !isAdmin()){ alert('เมนูนี้สำหรับ Admin เท่านั้น'); return; }
+  if(['employees','auditlog'].includes(key) && !isAdmin()){ alert('เมนูนี้สำหรับ Admin เท่านั้น'); return; }
   currentPage=key; renderSidebar();
   if(key==='dashboard') renderDashboard();
-  else if(key==='trace') renderTrace();
-  else if(key==='recordevent') renderRecordEventPage();
-  else if(key==='productmaster') renderProductMasterPage();
-  else if(key==='processmaster') renderProcessMasterPage();
+  else if(key==='farm') renderFarmPage();
+  else if(key==='feed') renderFeedPage();
+  else if(key==='hatchery') renderHatcheryPage();
+  else if(key==='lb') renderLBPage();
+  else if(key==='evi') renderEVIPage();
+  else if(key==='chiller') renderChillerPage();
+  else if(key==='cutup') renderCutupPage();
+  else if(key==='specialcut') renderSpecialcutPage();
+  else if(key==='freezepack') renderFreezepackPage();
+  else if(key==='cs') renderCSPage();
+  else if(key==='load') renderLoadPage();
   else if(key==='farmmaster') renderFarmMasterPage();
+  else if(key==='productmaster') renderProductMasterPage();
   else if(key==='employees') renderEmployeesPage();
   else if(key==='auditlog') renderAuditLogPage();
-  else if(key==='docvisibility') renderDocVisibilityPage();
 }
-function render(){ navigateTo(currentPage); }
+function breadcrumbHtml(activeKey){
+  const steps=[['lb','LB'],['evi','EVI'],['chiller','Chiller-OH'],['cutup','Cut Up'],['specialcut','Special Cut'],['freezepack','Freeze-Pack'],['cs','CS'],['load','Load']];
+  return `<div class="breadcrumb">${steps.map(([k,label],i)=>`${i>0?'<span class="arrow">→</span>':''}<span class="crumb ${k===activeKey?'active':''}" onclick="navigateTo('${k}')">${label}</span>`).join('')}</div>`;
+}
 
 /* ================= DASHBOARD ================= */
 async function renderDashboard(){
   setLoading();
-  let processes, products, farms;
+  let lb=[], evi=[], chiller=[], cutup=[], sc=[], fp=[], cs=[], load=[];
   try{
-    [processes, products, farms] = await Promise.all([apiListProcessMaster(), apiListProductMaster(), apiListFarmHouseFlock()]);
-  }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ Supabase (ต้องรัน patch2 + patch2b ก่อน)'); return; }
+    [lb,evi,chiller,cutup,sc,fp,cs,load] = await Promise.all([
+      apiListLB(), apiListEVI(), apiListChiller(), apiListCutup(), apiListSpecialcut(), apiListFreezepack(), apiListCS(), apiListLoad()
+    ]);
+  }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3 + patch3b แล้ว'); return; }
 
-  const byArea = {};
-  processes.forEach(p=>{ byArea[p.station] = (byArea[p.station]||0)+1; });
-  const cards = Object.keys(byArea).map(area=>`
-    <div class="stat-card" onclick="navigateTo('recordevent')">
-      <div class="num">${byArea[area]}</div><div class="lbl">${area}</div>
-      <span class="tag" style="background:var(--teal-100);color:var(--teal-700);">Process ที่กำหนดไว้</span>
-    </div>`).join('');
-
-  document.getElementById('mainContent').innerHTML=`
-    <div class="page-eyebrow">ภาพรวมระบบ · Event-Sourcing Trace Engine</div>
-    <div class="page-title">แดชบอร์ด</div>
-    <div class="page-desc">ระบบใหม่บันทึกทุกการเปลี่ยนแปลงเป็น "Production Event" เดียวกันหมด ไม่ว่าจะเป็น Station ไหน — เลือก Process ที่ต้องการจากเมนู "บันทึก Event" แล้วระบบจะปรับฟอร์มให้เหมาะสมเอง</div>
-    <div class="grid-cards">${cards}</div>
-    <div class="card" style="margin-top:20px;">
-      <div class="card-title">สรุป Master Data</div>
-      <div class="grid-cards">
-        <div class="stat-card" onclick="navigateTo('productmaster')"><div class="num">${products.length}</div><div class="lbl">Product Master</div></div>
-        <div class="stat-card" onclick="navigateTo('processmaster')"><div class="num">${processes.length}</div><div class="lbl">Process Master</div></div>
-        <div class="stat-card" onclick="navigateTo('farmmaster')"><div class="num">${farms.length}</div><div class="lbl">Farm/House/Flock อ้างอิง</div></div>
-      </div>
-    </div>
-  `;
-}
-
-/* ================= บันทึก Production Event (Universal — ใช้ได้ทุก Station) ================= */
-const DEFAULT_OUTPUT_TRACE_TYPE = {
-  HATCH_RECEIVE_EGG:'HATCH_EGG_LOT', HATCH_INCUBATE:'CHICK_LOT', HATCH_DELIVER_CHICK:'DELIVERY_LOT',
-  FARM_RECEIVE_CHICK:'FLOCK', FARM_REARING:'GROWING_RECORD', FEED_USAGE:'FEED_USAGE', FARM_CATCH:'CATCHING_LOT',
-  LB_RECEIVE:'LB_TRACE', EVI_PROCESS:'EVI_OUTPUT', EVI_BYPRODUCT:'BYPRODUCT',
-  CHILLER_PROCESS:'CHILLER_OUTPUT', CUTUP_PROCESS:'CUTUP_OUTPUT', CUTUP_FRAME:'CUTUP_BYPRODUCT',
-  SC_BB:'SC_OUTPUT', SC_BL:'SC_OUTPUT', SC_FILLET:'SC_OUTPUT', SC_WING:'SC_OUTPUT',
-  BAGPREP:'BAGPREP_OUTPUT', FREEZE:'FROZEN_LOT', PACK:'FG_LOT', BOXING:'BOXED',
-  CS_RECEIVE:'CS_STOCK', LOAD_SHIP:'SHIPMENT',
-  FURTHER_RECEIVE:'RM_LOT', FURTHER_PREP:'PROCESSING_LOT', FURTHER_COOK:'COOKED_LOT',
-  FURTHER_COOL:'CHILLED_FROZEN_LOT', FURTHER_PACK:'FG_LOT', FURTHER_SHIP:'SHIPMENT',
-};
-const DEFAULT_RELATION_TYPE = {
-  HATCH_RECEIVE_EGG:'TRANSFER', HATCH_INCUBATE:'CONVERT', HATCH_DELIVER_CHICK:'TRANSFER',
-  FARM_RECEIVE_CHICK:'CONVERT', FARM_REARING:'TRANSFER', FEED_USAGE:'INPUT', FARM_CATCH:'TRANSFER',
-  LB_RECEIVE:'TRANSFER', EVI_PROCESS:'CONVERT', EVI_BYPRODUCT:'BY_PRODUCT',
-  CHILLER_PROCESS:'SPLIT', CUTUP_PROCESS:'SPLIT', CUTUP_FRAME:'BY_PRODUCT',
-  SC_BB:'CONVERT', SC_BL:'CONVERT', SC_FILLET:'CONVERT', SC_WING:'CONVERT',
-  BAGPREP:'CONVERT', FREEZE:'CONVERT', PACK:'PACK', BOXING:'TRANSFER',
-  CS_RECEIVE:'TRANSFER', LOAD_SHIP:'SHIP',
-  FURTHER_RECEIVE:'TRANSFER', FURTHER_PREP:'MERGE', FURTHER_COOK:'CONVERT',
-  FURTHER_COOL:'CONVERT', FURTHER_PACK:'PACK', FURTHER_SHIP:'TRANSFER',
-};
-
-let evtInputTraces = [];
-let evtOutputRows = [];
-let evtProcessCode = null;
-let evtMainArea = null;
-
-async function renderRecordEventPage(){
-  setLoading();
-  let processes, products;
-  try{ [processes, products] = await Promise.all([apiListProcessMaster(), apiListProductMaster()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
-  window._processMasterCache = processes;
-  window._productMasterCache = products;
-  evtInputTraces = [];
-  evtOutputRows = [{trace_type:'', product_code:'', lot:'', sublot:'', qty:'', weight:'', unit:'', output_type:'MAIN'}];
-
-  const areas = [...new Set(processes.map(p=>p.station))];
-  const areaOptions = areas.map(a=>`<option value="${a}">${a}</option>`).join('');
+  const cards = [
+    {key:'lb', label:'LB (รับไก่เป็น)', n:lb.length},
+    {key:'evi', label:'EVI (ล้วงเครื่องใน)', n:evi.length},
+    {key:'chiller', label:'Chiller-OH', n:chiller.length},
+    {key:'cutup', label:'Cut Up', n:cutup.length},
+    {key:'specialcut', label:'Special Cut', n:sc.length},
+    {key:'freezepack', label:'Freeze-Pack', n:fp.length},
+    {key:'cs', label:'CS (ห้องเย็น)', n:cs.length},
+    {key:'load', label:'Load (จัดส่ง)', n:load.length},
+  ].map(c=>`<div class="stat-card" onclick="navigateTo('${c.key}')"><div class="num">${c.n}</div><div class="lbl">${c.label}</div></div>`).join('');
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">บันทึกข้อมูลการผลิต</div>
-    <div class="page-title">บันทึก Production Event</div>
-    <div class="page-desc">เลือก Station/Process ที่ต้องการบันทึก ระบบสร้าง Event เดียว ผูก Input/Output/Trace Link อัตโนมัติ — รองรับ 1 Input→หลาย Output (Split) และหลาย Input→1 Output (Merge) ในหน้าเดียว</div>
-    ${!canWrite() ? `<div class="readonly-banner">บทบาทของคุณ (${ROLE_LABEL[session.role]}) ดูข้อมูลได้อย่างเดียว ไม่สามารถบันทึก Event</div>` : ''}
-    <div class="card">
-      <div class="card-title">1) เลือก Station / Process</div>
-      <div class="form-grid3">
-        <div class="field"><label>Main Area (Station)</label><select id="evtArea" onchange="onEvtAreaChange()"><option value="">-- เลือก --</option>${areaOptions}</select></div>
-        <div class="field"><label>Process</label><select id="evtProcess" onchange="onEvtProcessChange()"><option value="">-- เลือก Area ก่อน --</option></select></div>
-        <div class="field"><label>วันที่ Event</label><input type="date" id="evtDate" value="${new Date().toISOString().slice(0,10)}"></div>
-      </div>
-      <div class="form-grid">
-        <div class="field"><label>กะ (Shift)</label><select id="evtShift"><option value="">ไม่ระบุ</option><option>เช้า</option><option>บ่าย</option><option>ดึก</option></select></div>
-        <div class="field"><label>หมายเหตุ</label><input type="text" id="evtNotes" placeholder="บันทึกเพิ่มเติม (ถ้ามี)"></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">2) เลือก Input ต้นทาง (ข้ามได้ถ้าเป็นจุดเริ่มต้น เช่น รับไก่เป็น/รับไข่ฟัก)</div>
-      <div class="trace-search">
-        <input type="text" id="inputSearchLot" placeholder="ค้นหาด้วย Lot">
-        <input type="text" id="inputSearchSublot" placeholder="Sublot" style="max-width:120px;">
-        <input type="text" id="inputSearchProduct" placeholder="Product Code" style="max-width:160px;">
-        <button class="btn" onclick="searchInputTraceUnits()">ค้นหา</button>
-      </div>
-      <div id="inputSearchResult"></div>
-      <div class="card-title" style="margin-top:14px;font-size:13px;">Input ที่เลือกแล้ว</div>
-      <div id="selectedInputsList"><div class="empty-state">ยังไม่ได้เลือก Input (ปกติถ้าเป็นจุดเริ่มต้น)</div></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">3) กำหนด Output (เพิ่มได้หลายแถว รองรับ Split / By-product / SC Bulk)</div>
-      <div id="specialCutTools" style="display:none;margin-bottom:12px;">
-        <div class="warn-banner">Process นี้รองรับ Bulk Import (TR-10) — วาง CSV (Product Code,Qty,Weight ต่อบรรทัด) หรืออัปโหลดไฟล์ Excel</div>
-        <textarea id="bulkCsvInput" placeholder="เช่น
-111117302,120,60
-111117303,80,40"></textarea>
-        <div style="margin-top:8px;display:flex;gap:8px;">
-          <button class="btn btn-sm" onclick="parseBulkCsv()">แปลง CSV เป็นแถว Output</button>
-          <label class="btn btn-ghost btn-sm" style="cursor:pointer;">อัปโหลด Excel (.xlsx)<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="parseBulkExcel(this)"></label>
-        </div>
-      </div>
-      <div class="out-row-grid grid-head">
-        <div>Trace Type</div><div>Product Code</div><div>Lot</div><div>Sublot</div><div>Qty</div><div>Weight</div><div>ประเภท</div><div></div>
-      </div>
-      <div id="outputRowsContainer"></div>
-      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="addOutputRow()">+ เพิ่มแถว Output</button>
-    </div>
-
-    <div class="card">
-      <button class="btn" ${!canWrite()?'disabled':''} onclick="submitProductionEvent()">บันทึก Production Event</button>
-      <div id="submitResult" style="margin-top:14px;"></div>
-    </div>
+    <div class="page-eyebrow">Module 1 · Daily Data User</div>
+    <div class="page-title">หน้าหลัก</div>
+    <div class="page-desc">เลือก Process ที่ต้องการบันทึกข้อมูลประจำวันจากเมนูด้านซ้าย — แต่ละหน้าจะดึงข้อมูลจากแผนกก่อนหน้าให้อัตโนมัติ</div>
+    <div class="grid-cards">${cards}</div>
   `;
-  renderOutputRows();
 }
 
-function onEvtAreaChange(){
-  const area = document.getElementById('evtArea').value;
-  const processes = (window._processMasterCache||[]).filter(p=>p.station===area && p.active);
-  const sel = document.getElementById('evtProcess');
-  sel.innerHTML = `<option value="">-- เลือก --</option>` + processes.map(p=>`<option value="${p.process_code}">${p.process_name} (${p.process_code})</option>`).join('');
-  evtMainArea = area; evtProcessCode = null;
-  document.getElementById('specialCutTools').style.display='none';
-}
-function onEvtProcessChange(){
-  evtProcessCode = document.getElementById('evtProcess').value;
-  const isSC = ['SC_BB','SC_BL','SC_FILLET','SC_WING'].includes(evtProcessCode);
-  document.getElementById('specialCutTools').style.display = isSC ? 'block' : 'none';
-  if(evtOutputRows.length && !evtOutputRows[0].trace_type){
-    evtOutputRows[0].trace_type = DEFAULT_OUTPUT_TRACE_TYPE[evtProcessCode] || '';
-    renderOutputRows();
-  }
-}
+/* ================= FARM ================= */
+async function renderFarmPage(){
+  setLoading();
+  let rows, farms;
+  try{ [rows, farms] = await Promise.all([apiListFarmDispatch(), apiListFarmMaster()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  const farmOptions = farms.map(f=>`<option value="${f.farm_id}">${f.farm_id} — ${f.farm_name}</option>`).join('');
+  const tableRows = rows.map(r=>`<tr><td>${r.dispatch_date}</td><td>${r.farm_id||'-'}</td><td>${r.house||'-'}</td><td>${r.bird_count||'-'}</td>
+    <td>${r.status==='ส่งแล้ว'?'<span class="badge badge-pass">ส่งแล้ว</span>':'<span class="badge badge-warn">รอส่ง</span>'}</td></tr>`).join('')
+    || `<tr><td colspan="5"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
-async function searchInputTraceUnits(){
-  const lot = document.getElementById('inputSearchLot').value.trim();
-  const sublot = document.getElementById('inputSearchSublot').value.trim();
-  const productCode = document.getElementById('inputSearchProduct').value.trim();
-  const box = document.getElementById('inputSearchResult');
-  box.innerHTML = `<div class="empty-state" style="padding:14px;">กำลังค้นหา...</div>`;
-  try{
-    const rows = await apiResolveTraceUnits(lot||null, sublot||null, productCode||null, null);
-    if(rows.length===0){ box.innerHTML = `<div class="empty-state">ไม่พบ Trace ที่ตรงกับเงื่อนไข</div>`; return; }
-    box.innerHTML = rows.slice(0,30).map(r=>`
-      <div class="source-item">
-        <input type="checkbox" class="inputTraceChk" value="${r.trace_id}" data-label="${r.trace_type} · Lot ${r.lot||'-'} / Sublot ${r.sublot||'-'} ${r.product_code?('· '+r.product_code):''}">
-        <span>${r.trace_type} · Lot ${r.lot||'-'} / Sublot ${r.sublot||'-'} ${r.product_code?('· Product '+r.product_code):''} · ${r.production_date||''}</span>
-      </div>`).join('') + `<button class="btn btn-sm" style="margin-top:8px;" onclick="addSelectedInputs()">+ เพิ่มเป็น Input ที่เลือก</button>`;
-  }catch(e){ box.innerHTML = `<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
-}
-function addSelectedInputs(){
-  document.querySelectorAll('.inputTraceChk:checked').forEach(chk=>{
-    if(!evtInputTraces.find(x=>x.trace_id===chk.value)) evtInputTraces.push({trace_id:chk.value, label:chk.dataset.label});
-  });
-  renderSelectedInputs();
-}
-function removeInput(traceId){ evtInputTraces = evtInputTraces.filter(x=>x.trace_id!==traceId); renderSelectedInputs(); }
-function renderSelectedInputs(){
-  const el = document.getElementById('selectedInputsList');
-  if(!el) return;
-  if(evtInputTraces.length===0){ el.innerHTML = `<div class="empty-state">ยังไม่ได้เลือก Input (ปกติถ้าเป็นจุดเริ่มต้น)</div>`; return; }
-  el.innerHTML = evtInputTraces.map(x=>`<div class="source-item"><span class="src-tag">${x.label}</span><button class="btn btn-ghost btn-sm" onclick="removeInput('${x.trace_id}')">ลบ</button></div>`).join('');
-}
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกข้อมูลนัดส่งไก่</div>
+      <div class="form-grid4">
+        <div class="field"><label>วันที่</label><input type="date" id="farmDate" value="${todayStr()}"></div>
+        <div class="field"><label>ฟาร์ม</label><select id="farmSelect">${farmOptions||'<option>ยังไม่มี Farm Master</option>'}</select></div>
+        <div class="field"><label>เล้า (House)</label><input type="text" id="farmHouse"></div>
+        <div class="field"><label>จำนวนตัว</label><input type="number" id="farmQty"></div>
+      </div>
+      <select id="farmStatus" style="max-width:200px;margin-top:6px;"><option>รอส่ง</option><option>ส่งแล้ว</option></select>
+      <div style="margin-top:12px;">
+        ${docUploadWidgetHtml('farm', null, 'เอกสารฟาร์ม')}
+      </div>
+      <button class="btn" style="margin-top:12px;" onclick="submitFarmDispatch()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
-function addOutputRow(){
-  evtOutputRows.push({trace_type: DEFAULT_OUTPUT_TRACE_TYPE[evtProcessCode]||'', product_code:'', lot:'', sublot:'', qty:'', weight:'', unit:'', output_type:'MAIN'});
-  renderOutputRows();
-}
-function removeOutputRow(idx){
-  evtOutputRows.splice(idx,1);
-  if(evtOutputRows.length===0) evtOutputRows.push({trace_type:'',product_code:'',lot:'',sublot:'',qty:'',weight:'',unit:'',output_type:'MAIN'});
-  renderOutputRows();
-}
-function updateOutputRow(idx, field, value){ evtOutputRows[idx][field] = value; }
-function renderOutputRows(){
-  const products = window._productMasterCache||[];
-  const container = document.getElementById('outputRowsContainer');
-  if(!container) return;
-  container.innerHTML = evtOutputRows.map((row,idx)=>{
-    const validCode = !row.product_code || products.find(p=>p.product_code===row.product_code);
-    return `<div class="out-row-grid">
-      <input type="text" value="${row.trace_type}" placeholder="เช่น CUTUP_OUTPUT" onchange="updateOutputRow(${idx},'trace_type',this.value)">
-      <input type="text" value="${row.product_code}" list="productCodeList" placeholder="Product Code" class="${validCode?'':'out-row-error'}" onchange="updateOutputRow(${idx},'product_code',this.value); renderOutputRows();">
-      <input type="text" value="${row.lot}" placeholder="Lot" onchange="updateOutputRow(${idx},'lot',this.value)">
-      <input type="text" value="${row.sublot}" placeholder="Sublot" onchange="updateOutputRow(${idx},'sublot',this.value)">
-      <input type="number" value="${row.qty}" placeholder="Qty" onchange="updateOutputRow(${idx},'qty',this.value)">
-      <input type="number" value="${row.weight}" placeholder="Weight" onchange="updateOutputRow(${idx},'weight',this.value)">
-      <select onchange="updateOutputRow(${idx},'output_type',this.value)">
-        <option value="MAIN" ${row.output_type==='MAIN'?'selected':''}>MAIN</option>
-        <option value="BY_PRODUCT" ${row.output_type==='BY_PRODUCT'?'selected':''}>BY_PRODUCT</option>
-      </select>
-      <button class="btn btn-ghost btn-sm" onclick="removeOutputRow(${idx})">✕</button>
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">ต้นน้ำ</div>
+    <div class="page-title">FARM — ฟาร์ม</div>
+    <div class="page-desc">บันทึกข้อมูลการเลี้ยงและส่งไก่เข้าโรงเชือด</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">รายการนัดส่ง (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>ฟาร์ม</th><th>เล้า</th><th>จำนวน (ตัว)</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
-  }).join('') + `<datalist id="productCodeList">${products.map(p=>`<option value="${p.product_code}">${p.product_name||''}</option>`).join('')}</datalist>`;
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'farm',null); });
+}
+async function submitFarmDispatch(){
+  const date=document.getElementById('farmDate').value, farmId=document.getElementById('farmSelect').value;
+  const house=document.getElementById('farmHouse').value.trim(), qty=document.getElementById('farmQty').value;
+  const status=document.getElementById('farmStatus').value;
+  if(!date||!farmId||!qty){ alert('กรุณากรอกให้ครบ'); return; }
+  try{ await apiCreateFarmDispatch(date,farmId,house,Number(qty),status); renderFarmPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
 
-function parseBulkCsv(){
-  const text = document.getElementById('bulkCsvInput').value.trim();
-  if(!text) return;
-  const lines = text.split('\n').map(l=>l.trim()).filter(l=>l);
-  evtOutputRows = lines.map(line=>{
-    const parts = line.split(/[,\t]/).map(p=>p.trim());
-    return {trace_type: DEFAULT_OUTPUT_TRACE_TYPE[evtProcessCode]||'SC_OUTPUT', product_code:parts[0]||'', lot:'', sublot:'', qty:parts[1]||'', weight:parts[2]||'', unit:'', output_type:'MAIN'};
-  });
-  renderOutputRows();
+/* ================= FEED ================= */
+async function renderFeedPage(){
+  setLoading();
+  let rows;
+  try{ rows = await apiListFeed(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  const tableRows = rows.map(r=>`<tr><td>${r.receive_date}</td><td>${r.material_name}</td><td>${r.qty_ton||'-'}</td><td>${r.supplier||'-'}</td><td>${r.lot_no||'-'}</td>
+    <td>${r.status==='รับแล้ว'?'<span class="badge badge-pass">รับแล้ว</span>':'<span class="badge badge-warn">รอตรวจ</span>'}</td></tr>`).join('')
+    || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกรับวัตถุดิบอาหารสัตว์</div>
+      <div class="form-grid3">
+        <div class="field"><label>วันที่</label><input type="date" id="feedDate" value="${todayStr()}"></div>
+        <div class="field"><label>วัตถุดิบ</label><input type="text" id="feedMaterial" placeholder="เช่น ข้าวโพด"></div>
+        <div class="field"><label>ปริมาณ (ตัน)</label><input type="number" id="feedQty"></div>
+        <div class="field"><label>Supplier</label><input type="text" id="feedSupplier"></div>
+        <div class="field"><label>Lot No.</label><input type="text" id="feedLotNo"></div>
+        <div class="field"><label>สถานะ</label><select id="feedStatus"><option>รอตรวจ</option><option>รับแล้ว</option></select></div>
+      </div>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('feed', null, 'ผลตรวจ/ใบส่งของ')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitFeed()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">ต้นน้ำ</div>
+    <div class="page-title">FEED — อาหารสัตว์</div>
+    <div class="page-desc">บันทึกการรับวัตถุดิบเข้าผลิตอาหารสัตว์</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">รายการรับวัตถุดิบ (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>วัตถุดิบ</th><th>ปริมาณ (ตัน)</th><th>Supplier</th><th>Lot No.</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'feed',null); });
 }
-function parseBulkExcel(inputEl){
+async function submitFeed(){
+  const date=document.getElementById('feedDate').value, material=document.getElementById('feedMaterial').value.trim();
+  const qty=document.getElementById('feedQty').value, supplier=document.getElementById('feedSupplier').value.trim();
+  const lotNo=document.getElementById('feedLotNo').value.trim(), status=document.getElementById('feedStatus').value;
+  if(!date||!material){ alert('กรุณากรอกให้ครบ'); return; }
+  try{ await apiCreateFeed(date,material,qty?Number(qty):null,supplier,lotNo,status); renderFeedPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= HATCHERY ================= */
+async function renderHatcheryPage(){
+  setLoading();
+  let rows;
+  try{ rows = await apiListHatchery(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  const tableRows = rows.map(r=>`<tr><td>${r.hatch_date}</td><td>${r.breed||'-'}</td><td>${r.batch_no||'-'}</td><td>${r.qty||'-'}</td><td>${r.hatch_rate_pct||'-'}%</td><td>${r.farm_dest||'-'}</td>
+    <td><span class="badge ${r.status==='ส่งแล้ว'?'badge-pass':(r.status==='พร้อมส่ง'?'badge-info':'badge-warn')}">${r.status}</span></td></tr>`).join('')
+    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกข้อมูลการฟักไข่</div>
+      <div class="form-grid3">
+        <div class="field"><label>วันที่</label><input type="date" id="hatchDate" value="${todayStr()}"></div>
+        <div class="field"><label>สายพันธุ์</label><input type="text" id="hatchBreed" placeholder="เช่น Ross, Arbor Acres"></div>
+        <div class="field"><label>Batch No.</label><input type="text" id="hatchBatch"></div>
+        <div class="field"><label>จำนวน (ตัว)</label><input type="number" id="hatchQty"></div>
+        <div class="field"><label>อัตราฟัก (%)</label><input type="number" id="hatchRate" step="0.01"></div>
+        <div class="field"><label>ฟาร์มปลายทาง</label><input type="text" id="hatchFarmDest"></div>
+      </div>
+      <select id="hatchStatus" style="max-width:200px;margin-top:6px;"><option>ฟักไข่</option><option>พร้อมส่ง</option><option>ส่งแล้ว</option></select>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('hatchery', null, 'ผลตรวจ/รูปลูกไก่')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitHatchery()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">ต้นน้ำ</div>
+    <div class="page-title">HATCHERY — โรงฟัก</div>
+    <div class="page-desc">บันทึกข้อมูลการผลิตลูกไก่</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">รายการผลิต (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>สายพันธุ์</th><th>Batch</th><th>จำนวน</th><th>อัตราฟัก</th><th>ฟาร์มปลายทาง</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'hatchery',null); });
+}
+async function submitHatchery(){
+  const date=document.getElementById('hatchDate').value, breed=document.getElementById('hatchBreed').value.trim();
+  const batch=document.getElementById('hatchBatch').value.trim(), qty=document.getElementById('hatchQty').value;
+  const rate=document.getElementById('hatchRate').value, farmDest=document.getElementById('hatchFarmDest').value.trim();
+  const status=document.getElementById('hatchStatus').value;
+  if(!date||!breed){ alert('กรุณากรอกให้ครบ'); return; }
+  try{ await apiCreateHatchery(date,breed,batch,qty?Number(qty):null,rate?Number(rate):null,farmDest,status); renderHatcheryPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= LB (รับไก่เป็น) ================= */
+async function renderLBPage(){
+  setLoading();
+  let rows, farms;
+  try{ [rows, farms] = await Promise.all([apiListLB(), apiListFarmMaster()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3 + patch3b แล้ว'); return; }
+  rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  const farmOptions = farms.map(f=>`<option value="${f.farm_id}">${f.farm_id} — ${f.farm_name}</option>`).join('');
+
+  const tableRows = rows.map(r=>`<tr>
+    <td>${r.received_date}</td><td class="lotcode">${r.lb_lot_code}</td><td>${r.sublot}</td>
+    <td>${r.farm_id||'-'}</td><td>${r.house||'-'}</td><td>${r.flock_batch||'-'}</td>
+    <td>${r.received_qty}</td><td>${r.avg_weight_kg||'-'}</td><td>${r.dead_on_arrival_qty||0}</td>
+  </tr>`).join('') || `<tr><td colspan="9"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกข้อมูลรับไก่เป็น</div>
+      <div class="form-grid3">
+        <div class="field"><label>วันที่เข้าเชือด</label><input type="date" id="lbDate" value="${todayStr()}"></div>
+        <div class="field"><label>ฟาร์ม</label><select id="lbFarm">${farmOptions||'<option>ยังไม่มี Farm Master</option>'}</select></div>
+        <div class="field"><label>เล้า (House)</label><input type="text" id="lbHouse"></div>
+        <div class="field"><label>Flock / รุ่นการเลี้ยง</label><input type="text" id="lbFlock"></div>
+        <div class="field"><label>Sub Lot</label><input type="text" id="lbSublot" placeholder="เช่น 01, 99H"></div>
+        <div class="field"><label>จำนวนรับ (ตัว)</label><input type="number" id="lbQty"></div>
+        <div class="field"><label>น้ำหนักเฉลี่ย (kg)</label><input type="number" step="0.01" id="lbAvgWeight"></div>
+        <div class="field"><label>จำนวนตัวไก่ตาย (DOA)</label><input type="number" id="lbDoa" value="0"></div>
+      </div>
+      <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="lbNote"></div>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('lb', null, 'เอกสารรับไก่')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitLB()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">สายการผลิต</div>
+    <div class="page-title">LB — รับไก่เป็น</div>
+    ${breadcrumbHtml('lb')}
+    <div class="page-desc">บันทึกข้อมูลรับไก่เป็นจากฟาร์ม เป็นจุดเริ่มต้นของ Lot DLD (พ.ศ.+วันจูเลียน+Sub Lot)</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>LB Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เล้า</th><th>Flock</th><th>จำนวนรับ</th><th>นน.เฉลี่ย</th><th>DOA</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'lb',null); });
+}
+async function submitLB(){
+  const date=document.getElementById('lbDate').value, farmId=document.getElementById('lbFarm').value;
+  const house=document.getElementById('lbHouse').value.trim(), flock=document.getElementById('lbFlock').value.trim();
+  const sublot=document.getElementById('lbSublot').value.trim(), qty=document.getElementById('lbQty').value;
+  const avgWeight=document.getElementById('lbAvgWeight').value, doa=document.getElementById('lbDoa').value;
+  const note=document.getElementById('lbNote').value.trim();
+  if(!date||!sublot||!qty){ alert('กรุณากรอกวันที่, Sub Lot และจำนวนรับให้ครบ'); return; }
+  try{ await apiCreateLB(date,farmId,house,flock,sublot,Number(qty),avgWeight?Number(avgWeight):null,doa?Number(doa):0,note); renderLBPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= EVI (ล้วงเครื่องใน) ================= */
+const EVI_BYPRODUCT_DEFAULTS = ['ตับ','กึ๋น','หัวใจ','ไส้','ขา'];
+let eviByproductRows = [];
+async function renderEVIPage(){
+  setLoading();
+  let rows;
+  try{ rows = await apiListEVI(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  eviByproductRows = EVI_BYPRODUCT_DEFAULTS.map(name=>({product_name:name, qty_kg:'', qty_pcs:'', note:''}));
+  eviByproductRows.push({product_name:'อื่นๆ (ระบุ)', qty_kg:'', qty_pcs:'', note:''});
+
+  const tableRows = rows.map(r=>`<tr>
+    <td class="lotcode">${r.lb_lot_code}</td><td>${r.sublot}</td>
+    <td>${r.entering_slaughter_qty??'-'}</td><td>${r.doa_qty??0}</td><td>${r.condemn_qty??0}</td><td>${r.partial_qty??0}</td>
+    <td><b>${r.entering_chiller_qty??'-'}</b></td>
+    <td>${r.ccp1_result==='ผ่าน'?'<span class="badge badge-pass">ผ่าน</span>':(r.ccp1_result==='ไม่ผ่าน'?'<span class="badge badge-fail">ไม่ผ่าน</span>':'-')}</td>
+  </tr>`).join('') || `<tr><td colspan="8"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกข้อมูลล้วงเครื่องใน (ดึงอ้างอิงจาก LB)</div>
+      <div class="form-grid3">
+        <div class="field"><label>LB Lot</label><input type="text" id="eviLbLot" placeholder="เช่น 2569227"></div>
+        <div class="field"><label>Sublot</label><input type="text" id="eviSublot" placeholder="เช่น 01"></div>
+        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchLBForEVI()">ดึงข้อมูลจาก LB</button></div>
+      </div>
+      <div id="eviLbInfo"></div>
+      <div class="form-grid3" style="margin-top:10px;">
+        <div class="field"><label>ไก่ตาย DOA (ก่อนเข้ากระบวนการ)</label><input type="number" id="eviDoa" value="0" oninput="recalcEVI()"></div>
+        <div class="field"><label>Condemn (ตัว)</label><input type="number" id="eviCondemn" value="0" oninput="recalcEVI()"></div>
+        <div class="field"><label>Partial ขายหน้าโรง (ตัว)</label><input type="number" id="eviPartial" value="0" oninput="recalcEVI()"></div>
+      </div>
+      <div class="form-grid" style="margin-top:6px;">
+        <div class="field"><label>จำนวนตัวเข้าเชือด (คำนวณอัตโนมัติ = รับ - DOA)</label><input type="text" id="eviEnteringSlaughter" class="calc-field" disabled></div>
+        <div class="field"><label>จำนวนตัวเข้า Chiller (คำนวณอัตโนมัติ = เข้าเชือด - Condemn - Partial)</label><input type="text" id="eviEnteringChiller" class="calc-field" disabled></div>
+      </div>
+      <div class="form-grid" style="margin-top:6px;">
+        <div class="field"><label>ผล CCP1 (IO Washer)</label><select id="eviCcp1"><option value="">ยังไม่ตรวจ</option><option>ผ่าน</option><option>ไม่ผ่าน</option></select></div>
+        <div class="field"><label>หมายเหตุ</label><input type="text" id="eviNote"></div>
+      </div>
+
+      <div class="card-title" style="margin-top:16px;">ผลผลิตเครื่องใน (By-product)</div>
+      <div class="line-item-row grid-head"><div>รายการสินค้า</div><div>จำนวน (kg)</div><div>จำนวน (ชิ้น)</div><div>หมายเหตุ</div><div></div></div>
+      <div id="eviByproductRows"></div>
+
+      <div style="margin-top:12px;">${docUploadWidgetHtml('evi', null, 'เอกสารแบบ/รายงาน/รูปภาพ')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitEVI()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">สายการผลิต</div>
+    <div class="page-title">EVI — ล้วงเครื่องใน</div>
+    ${breadcrumbHtml('evi')}
+    <div class="page-desc">บันทึกข้อมูลการล้วงเครื่องใน คำนวณจำนวนตัวเข้า Chiller อัตโนมัติ</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <table><thead><tr><th>LB Lot</th><th>Sublot</th><th>เข้าเชือด</th><th>DOA</th><th>Condemn</th><th>Partial</th><th>เข้า Chiller</th><th>CCP1</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  renderEVIByproductRows();
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'evi',null); });
+}
+window._eviLbData = null;
+async function fetchLBForEVI(){
+  const lot=document.getElementById('eviLbLot').value.trim(), sublot=document.getElementById('eviSublot').value.trim();
+  const infoEl=document.getElementById('eviLbInfo');
+  if(!lot||!sublot){ infoEl.innerHTML=`<div class="err-banner">กรุณากรอก LB Lot และ Sublot</div>`; return; }
+  try{
+    const rows = await apiListLB(lot, sublot);
+    const match = rows.find(r=>r.lb_lot_code===lot && r.sublot===sublot);
+    if(!match){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ LB Lot ${lot} / Sublot ${sublot}</div>`; window._eviLbData=null; return; }
+    window._eviLbData = match;
+    infoEl.innerHTML = `<div class="note-banner">พบข้อมูล: ฟาร์ม ${match.farm_id||'-'} / เล้า ${match.house||'-'} / Flock ${match.flock_batch||'-'} / จำนวนรับ ${match.received_qty} ตัว / วันที่ ${match.received_date}</div>`;
+    recalcEVI();
+  }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
+}
+function recalcEVI(){
+  if(!window._eviLbData) return;
+  const doa=Number(document.getElementById('eviDoa').value||0);
+  const condemn=Number(document.getElementById('eviCondemn').value||0);
+  const partial=Number(document.getElementById('eviPartial').value||0);
+  const enteringSlaughter = window._eviLbData.received_qty - doa;
+  const enteringChiller = enteringSlaughter - condemn - partial;
+  document.getElementById('eviEnteringSlaughter').value = enteringSlaughter;
+  document.getElementById('eviEnteringChiller').value = enteringChiller;
+}
+function renderEVIByproductRows(){
+  const container = document.getElementById('eviByproductRows');
+  if(!container) return;
+  container.innerHTML = eviByproductRows.map((row,idx)=>`
+    <div class="line-item-row">
+      <input type="text" value="${row.product_name}" onchange="eviByproductRows[${idx}].product_name=this.value">
+      <input type="number" value="${row.qty_kg}" placeholder="kg" onchange="eviByproductRows[${idx}].qty_kg=this.value">
+      <input type="number" value="${row.qty_pcs}" placeholder="ชิ้น" onchange="eviByproductRows[${idx}].qty_pcs=this.value">
+      <input type="text" value="${row.note}" onchange="eviByproductRows[${idx}].note=this.value">
+      <button class="btn btn-ghost btn-sm" onclick="eviByproductRows.splice(${idx},1);renderEVIByproductRows()">✕</button>
+    </div>`).join('') + `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="eviByproductRows.push({product_name:'',qty_kg:'',qty_pcs:'',note:''});renderEVIByproductRows()">+ เพิ่มแถว</button>`;
+}
+async function submitEVI(){
+  if(!window._eviLbData){ alert('กรุณาดึงข้อมูลจาก LB ก่อน'); return; }
+  const lot=window._eviLbData.lb_lot_code, sublot=window._eviLbData.sublot;
+  const doa=document.getElementById('eviDoa').value, condemn=document.getElementById('eviCondemn').value, partial=document.getElementById('eviPartial').value;
+  const ccp1=document.getElementById('eviCcp1').value, note=document.getElementById('eviNote').value.trim();
+  const byproducts = eviByproductRows.filter(r=>r.product_name && (r.qty_kg||r.qty_pcs));
+  try{
+    await apiCreateEVI(lot, sublot, Number(doa||0), Number(condemn||0), Number(partial||0), ccp1||null, note, byproducts);
+    renderEVIPage();
+  }catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= CHILLER - OH ================= */
+window._chillerEviData = null;
+async function renderChillerPage(){
+  setLoading();
+  let rows;
+  try{ rows = await apiListChiller(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+
+  const tableRows = rows.map(r=>`<tr>
+    <td class="lotcode">${r.evi_lot_code}</td><td>${r.sublot}</td><td>${r.farm_id||'-'}</td>
+    <td>${r.entering_qty??'-'}</td><td>${r.exit_time||'-'}</td><td>${r.exit_qty??'-'}</td>
+    <td>${r.to_wholebird_qty??'-'}</td><td>${r.to_cutup_qty??'-'}</td><td>${r.temp_c??'-'}</td>
+  </tr>`).join('') || `<tr><td colspan="9"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกข้อมูล Chiller-OH (ดึงอ้างอิงจาก EVI)</div>
+      <div class="form-grid3">
+        <div class="field"><label>EVI Lot</label><input type="text" id="chillerLot" placeholder="เช่น 2569227"></div>
+        <div class="field"><label>Sublot</label><input type="text" id="chillerSublot" placeholder="เช่น 01"></div>
+        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchEVIForChiller()">ดึงข้อมูลจาก EVI</button></div>
+      </div>
+      <div id="chillerEviInfo"></div>
+      <div class="form-grid3" style="margin-top:10px;">
+        <div class="field"><label>เวลาออกจาก Chiller</label><input type="time" id="chillerExitTime"></div>
+        <div class="field"><label>จำนวนออกจาก Chiller (ตัว)</label><input type="number" id="chillerExitQty"></div>
+        <div class="field"><label>อุณหภูมิ (°C)</label><input type="number" step="0.1" id="chillerTemp"></div>
+      </div>
+      <div class="card-title" style="margin-top:12px;font-size:13px;">แยกเส้นทางหลังออกจาก Chiller</div>
+      <div class="form-grid">
+        <div class="field"><label>ไปผลิตสินค้าไก่ตัว (ตัว)</label><input type="number" id="chillerToWholebird" oninput="checkChillerBalance()"></div>
+        <div class="field"><label>แขวนขึ้นราวไป Cut-up (ตัว)</label><input type="number" id="chillerToCutup" oninput="checkChillerBalance()"></div>
+      </div>
+      <div id="chillerBalanceNote" style="font-size:12.5px;margin-top:4px;"></div>
+      <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="chillerNote"></div>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('chiller', null, 'เอกสาร/รายงานอุณหภูมิ')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitChiller()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">สายการผลิต</div>
+    <div class="page-title">CHILLER-OH — ลดอุณหภูมิซาก</div>
+    ${breadcrumbHtml('chiller')}
+    <div class="page-desc">บันทึกข้อมูลการนำซากเข้า-ออกจาก Chiller และแยกเส้นทางไปสินค้าไก่ตัว/Cut-up</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <table><thead><tr><th>EVI Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เข้า Chiller</th><th>เวลาออก</th><th>ออก</th><th>ไปไก่ตัว</th><th>ไป Cut-up</th><th>อุณหภูมิ</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'chiller',null); });
+}
+async function fetchEVIForChiller(){
+  const lot=document.getElementById('chillerLot').value.trim(), sublot=document.getElementById('chillerSublot').value.trim();
+  const infoEl=document.getElementById('chillerEviInfo');
+  if(!lot||!sublot){ infoEl.innerHTML=`<div class="err-banner">กรุณากรอก EVI Lot และ Sublot</div>`; return; }
+  try{
+    const rows = await apiListEVI(lot, sublot);
+    const match = rows.find(r=>r.lb_lot_code===lot && r.sublot===sublot);
+    if(!match){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ EVI Lot ${lot} / Sublot ${sublot}</div>`; window._chillerEviData=null; return; }
+    window._chillerEviData = match;
+    document.getElementById('chillerExitQty').value = match.entering_chiller_qty||'';
+    infoEl.innerHTML = `<div class="note-banner">พบข้อมูล: จำนวนตัวเข้า Chiller = <b>${match.entering_chiller_qty}</b> ตัว</div>`;
+    checkChillerBalance();
+  }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
+}
+function checkChillerBalance(){
+  const noteEl = document.getElementById('chillerBalanceNote');
+  if(!window._chillerEviData || !noteEl) return;
+  const wb=Number(document.getElementById('chillerToWholebird').value||0);
+  const cu=Number(document.getElementById('chillerToCutup').value||0);
+  const exitQty=Number(document.getElementById('chillerExitQty').value||0);
+  const sum = wb+cu;
+  if(sum===0){ noteEl.innerHTML=''; return; }
+  if(sum===exitQty){ noteEl.innerHTML = `<span style="color:var(--green-700);">✓ ยอดรวมตรงกับจำนวนออกจาก Chiller (${exitQty})</span>`; }
+  else{ noteEl.innerHTML = `<span style="color:var(--red-600);">⚠ ยอดรวม (${sum}) ไม่ตรงกับจำนวนออกจาก Chiller (${exitQty}) ต่างกัน ${Math.abs(sum-exitQty)} ตัว</span>`; }
+}
+async function submitChiller(){
+  if(!window._chillerEviData){ alert('กรุณาดึงข้อมูลจาก EVI ก่อน'); return; }
+  const lot=window._chillerEviData.lb_lot_code, sublot=window._chillerEviData.sublot;
+  const exitTime=document.getElementById('chillerExitTime').value, exitQty=document.getElementById('chillerExitQty').value;
+  const toWb=document.getElementById('chillerToWholebird').value, toCu=document.getElementById('chillerToCutup').value;
+  const temp=document.getElementById('chillerTemp').value, note=document.getElementById('chillerNote').value.trim();
+  try{
+    await apiCreateChiller(lot, sublot, exitTime||null, exitQty?Number(exitQty):null, toWb?Number(toWb):null, toCu?Number(toCu):null, temp?Number(temp):null, note);
+    renderChillerPage();
+  }catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= CUT UP ================= */
+let cutupProductRows = [];
+async function renderCutupPage(){
+  setLoading();
+  let rows, products;
+  try{ [rows, products] = await Promise.all([apiListCutup(), apiListProductMaster()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  window._cutupProductCache = products;
+  cutupProductRows = [{product_name:'',product_code:'',qty_pcs:'',weight_kg:'',destination:''}];
+
+  const rowParts = await Promise.all(rows.map(async r=>{
+    let prods=[]; try{ prods = await apiListCutupProducts(r.id); }catch(e){}
+    const totalPcs = prods.reduce((s,p)=>s+(p.qty_pcs||0),0);
+    const totalWeight = prods.reduce((s,p)=>s+(Number(p.weight_kg)||0),0);
+    return `<tr><td>${r.cut_date||'-'}</td><td class="lotcode">${r.chiller_lot_code}</td><td>${r.sublot}</td>
+      <td>${prods.length} รายการ</td><td>${totalPcs}</td><td>${totalWeight.toFixed(1)}</td></tr>`;
+  }));
+  const tableRows = rowParts.join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกผลผลิตหลังการชำแหละ (ดึงอ้างอิงจาก Chiller-OH)</div>
+      <div class="form-grid3">
+        <div class="field"><label>Chiller Lot</label><input type="text" id="cutupLot" placeholder="เช่น 2569227"></div>
+        <div class="field"><label>Sublot</label><input type="text" id="cutupSublot" placeholder="เช่น 01"></div>
+        <div class="field"><label>วันที่ตัดแต่ง</label><input type="date" id="cutupDate" value="${todayStr()}"></div>
+      </div>
+      <div class="card-title" style="margin-top:14px;font-size:13px;">รายการผลผลิต</div>
+      <div class="line-item-row grid-head"><div>Product</div><div>จำนวน (ชิ้น)</div><div>น้ำหนัก (kg)</div><div>ส่งไป</div><div></div></div>
+      <div id="cutupProductRows"></div>
+      <div class="field full" style="margin-top:10px;"><label>หมายเหตุ</label><input type="text" id="cutupNote"></div>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('cutup', null, 'สรุปผลผลิต/รูปภาพ')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitCutup()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">สายการผลิต</div>
+    <div class="page-title">CUT UP — ชำแหละ</div>
+    ${breadcrumbHtml('cutup')}
+    <div class="page-desc">บันทึกผลผลิตแยกชิ้นส่วนจากซากไก่ (BB, ปีก, BL, สันใน ฯลฯ) และปลายทางที่ส่งต่อ</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>Chiller Lot</th><th>Sublot</th><th>รายการสินค้า</th><th>รวม (ชิ้น)</th><th>รวม (kg)</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  renderCutupProductRows();
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'cutup',null); });
+}
+function renderCutupProductRows(){
+  const container = document.getElementById('cutupProductRows');
+  if(!container) return;
+  const products = window._cutupProductCache||[];
+  const dl = `<datalist id="cutupProductCodeList">${products.map(p=>`<option value="${p.product_code}">${p.product_name||''}</option>`).join('')}</datalist>`;
+  container.innerHTML = cutupProductRows.map((row,idx)=>`
+    <div class="line-item-row">
+      <input type="text" value="${row.product_code}" list="cutupProductCodeList" placeholder="Product Code" onchange="cutupProductRows[${idx}].product_code=this.value">
+      <input type="number" value="${row.qty_pcs}" onchange="cutupProductRows[${idx}].qty_pcs=this.value">
+      <input type="number" value="${row.weight_kg}" onchange="cutupProductRows[${idx}].weight_kg=this.value">
+      <input type="text" value="${row.destination}" placeholder="เช่น BB, ปีก, BL" onchange="cutupProductRows[${idx}].destination=this.value">
+      <button class="btn btn-ghost btn-sm" onclick="cutupProductRows.splice(${idx},1);renderCutupProductRows()">✕</button>
+    </div>`).join('') + dl + `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="cutupProductRows.push({product_name:'',product_code:'',qty_pcs:'',weight_kg:'',destination:''});renderCutupProductRows()">+ เพิ่มแถว</button>`;
+}
+async function submitCutup(){
+  const lot=document.getElementById('cutupLot').value.trim(), sublot=document.getElementById('cutupSublot').value.trim();
+  const date=document.getElementById('cutupDate').value, note=document.getElementById('cutupNote').value.trim();
+  if(!lot||!sublot){ alert('กรุณากรอก Chiller Lot และ Sublot'); return; }
+  const products = cutupProductRows.filter(r=>r.product_code || r.qty_pcs || r.weight_kg);
+  if(products.length===0){ alert('กรุณากรอกรายการผลผลิตอย่างน้อย 1 แถว'); return; }
+  try{ await apiCreateCutup(lot, sublot, date, note, products); renderCutupPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= SPECIAL CUT ================= */
+let scProductRows = [];
+async function renderSpecialcutPage(){
+  setLoading();
+  let rows, products;
+  try{ [rows, products] = await Promise.all([apiListSpecialcut(), apiListProductMaster()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  window._scProductCache = products;
+  scProductRows = [{product_code:'',product_name:'',qty_pcs:'',weight_kg:'',note:''}];
+
+  const rowParts = await Promise.all(rows.map(async r=>{
+    let prods=[]; try{ prods = await apiListSpecialcutProducts(r.id); }catch(e){}
+    const totalWeight = prods.reduce((s,p)=>s+(Number(p.weight_kg)||0),0);
+    return `<tr><td>${r.produced_date}</td><td class="lotcode">${r.lot}</td><td>${r.sublot}</td><td>${r.part||'-'}</td>
+      <td>${prods.length} รายการ</td><td>${totalWeight.toFixed(1)}</td>
+      <td><span class="badge ${r.status==='พร้อมบันทึก'?'badge-pass':'badge-warn'}">${r.status}</span></td></tr>`;
+  }));
+  const tableRows = rowParts.join('') || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกข้อมูล Special Cut</div>
+      <div class="form-grid4">
+        <div class="field"><label>วันที่ผลิต</label><input type="date" id="scDate" value="${todayStr()}"></div>
+        <div class="field"><label>Lot</label><input type="text" id="scLot" placeholder="เช่น 2569227"></div>
+        <div class="field"><label>Sublot</label><input type="text" id="scSublot" placeholder="เช่น 01"></div>
+        <div class="field"><label>เลือก Part</label><select id="scPart"><option>BB</option><option>BL</option><option>Fillet</option><option>Wing</option></select></div>
+      </div>
+      <div class="form-grid" style="margin-top:6px;">
+        <div class="field"><label>RM Weight (kg)</label><input type="number" id="scRmWeight"></div>
+        <div class="field"><label>สถานะ</label><select id="scStatus"><option>ร่างข้อมูล</option><option>พร้อมบันทึก</option></select></div>
+      </div>
+      <div class="warn-banner" style="margin-top:10px;">รองรับ Bulk — วาง CSV (Product Code,จำนวนชิ้น,น้ำหนัก) หรืออัปโหลดไฟล์ Excel</div>
+      <textarea id="scBulkCsv" placeholder="เช่น
+110001,50,500
+110004,30,300"></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="parseSCBulkCsv()">แปลง CSV เป็นแถว</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">อัปโหลด Excel (.xlsx)<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="parseSCBulkExcel(this)"></label>
+        <button class="btn btn-ghost btn-sm" onclick="downloadSCTemplate()">ดาวน์โหลด Template</button>
+      </div>
+      <div class="card-title" style="margin-top:14px;font-size:13px;">รายการสินค้า</div>
+      <div class="line-item-row grid-head"><div>Product Code</div><div>จำนวน (ชิ้น)</div><div>น้ำหนัก (kg)</div><div>หมายเหตุ</div><div></div></div>
+      <div id="scProductRows"></div>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('specialcut', null, 'รายงานผลผลิต/รูปภาพ')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitSpecialcut()">บันทึกข้อมูล</button>
+      <div id="scSubmitResult" style="margin-top:10px;"></div>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">สายการผลิต</div>
+    <div class="page-title">SPECIAL CUT — ตัดแต่งพิเศษ</div>
+    ${breadcrumbHtml('specialcut')}
+    <div class="page-desc">บันทึกผลผลิตตัดแต่งพิเศษต่อ Product Code — ตรวจสอบกับ Product Master ก่อนบันทึกทุกครั้ง</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Part</th><th>รายการสินค้า</th><th>รวม (kg)</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  renderSCProductRows();
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'specialcut',null); });
+}
+function renderSCProductRows(){
+  const container = document.getElementById('scProductRows');
+  if(!container) return;
+  const products = window._scProductCache||[];
+  const dl = `<datalist id="scProductCodeList">${products.map(p=>`<option value="${p.product_code}">${p.product_name||''}</option>`).join('')}</datalist>`;
+  container.innerHTML = scProductRows.map((row,idx)=>{
+    const validCode = !row.product_code || products.find(p=>p.product_code===row.product_code);
+    return `<div class="line-item-row">
+      <input type="text" value="${row.product_code}" list="scProductCodeList" placeholder="Product Code" style="${validCode?'':'border-color:var(--red-600);background:var(--red-100);'}" onchange="scProductRows[${idx}].product_code=this.value; renderSCProductRows();">
+      <input type="number" value="${row.qty_pcs}" onchange="scProductRows[${idx}].qty_pcs=this.value">
+      <input type="number" value="${row.weight_kg}" onchange="scProductRows[${idx}].weight_kg=this.value">
+      <input type="text" value="${row.note}" onchange="scProductRows[${idx}].note=this.value">
+      <button class="btn btn-ghost btn-sm" onclick="scProductRows.splice(${idx},1);renderSCProductRows()">✕</button>
+    </div>`;
+  }).join('') + dl + `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="scProductRows.push({product_code:'',qty_pcs:'',weight_kg:'',note:''});renderSCProductRows()">+ เพิ่มแถว</button>`;
+}
+function parseSCBulkCsv(){
+  const text = document.getElementById('scBulkCsv').value.trim();
+  if(!text) return;
+  scProductRows = text.split('\n').map(l=>l.trim()).filter(l=>l).map(line=>{
+    const parts = line.split(/[,\t]/).map(p=>p.trim());
+    return {product_code:parts[0]||'', qty_pcs:parts[1]||'', weight_kg:parts[2]||'', note:''};
+  });
+  renderSCProductRows();
+}
+function parseSCBulkExcel(inputEl){
   const file = inputEl.files[0]; if(!file) return;
   const reader = new FileReader();
   reader.onload = (e)=>{
     const wb = XLSX.read(e.target.result, {type:'array'});
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const json = XLSX.utils.sheet_to_json(sheet, {header:1});
-    evtOutputRows = json.filter(r=>r&&r[0]).map(r=>({
-      trace_type: DEFAULT_OUTPUT_TRACE_TYPE[evtProcessCode]||'SC_OUTPUT',
-      product_code: String(r[0]||''), lot:'', sublot:'', qty:r[1]||'', weight:r[2]||'', unit:'', output_type:'MAIN'
-    }));
-    renderOutputRows();
+    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+    scProductRows = json.filter(r=>r&&r[0]).map(r=>({product_code:String(r[0]||''), qty_pcs:r[1]||'', weight_kg:r[2]||'', note:''}));
+    renderSCProductRows();
   };
   reader.readAsArrayBuffer(file);
 }
-
-async function submitProductionEvent(){
-  const resultEl = document.getElementById('submitResult');
-  const area = document.getElementById('evtArea').value;
-  const process = document.getElementById('evtProcess').value;
-  const date = document.getElementById('evtDate').value;
-  const shift = document.getElementById('evtShift').value;
-  const notes = document.getElementById('evtNotes').value;
-  if(!area || !process || !date){ alert('กรุณาเลือก Area / Process / วันที่ ให้ครบ'); return; }
-
-  const products = window._productMasterCache||[];
-  const invalidRows = evtOutputRows.filter(r=>r.product_code && !products.find(p=>p.product_code===r.product_code));
-  if(invalidRows.length>0){ alert(`พบ Product Code ที่ไม่อยู่ใน Master ${invalidRows.length} รายการ กรุณาแก้ก่อน Confirm (TR-11)`); renderOutputRows(); return; }
-
-  const validOutputs = evtOutputRows.filter(r=> (r.qty && Number(r.qty)>0) || (r.weight && Number(r.weight)>0) || r.product_code || r.lot);
-  if(validOutputs.length===0){ alert('กรุณากรอก Output อย่างน้อย 1 แถว'); return; }
-
-  const inputs = evtInputTraces.map(x=>({trace_id:x.trace_id}));
-  const outputs = validOutputs.map(r=>({
-    trace_type: r.trace_type || DEFAULT_OUTPUT_TRACE_TYPE[process] || 'PROCESSING_LOT',
-    product_code: r.product_code || null, lot: r.lot || null, sublot: r.sublot || null,
-    qty: r.qty || null, weight: r.weight || null, unit: r.unit || null,
-    output_type: r.output_type || 'MAIN',
-    relation_type: DEFAULT_RELATION_TYPE[process] || 'TRANSFER',
-  }));
-
+function downloadSCTemplate(){
+  const csv = 'Product Code,จำนวนชิ้น,น้ำหนัก(kg)\n110001,50,500\n';
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='SC_Import_Template.csv'; a.click();
+}
+async function submitSpecialcut(){
+  const resultEl = document.getElementById('scSubmitResult');
+  const date=document.getElementById('scDate').value, lot=document.getElementById('scLot').value.trim();
+  const sublot=document.getElementById('scSublot').value.trim(), part=document.getElementById('scPart').value;
+  const rmWeight=document.getElementById('scRmWeight').value, status=document.getElementById('scStatus').value;
+  if(!date||!lot||!sublot){ alert('กรุณากรอก วันที่/Lot/Sublot ให้ครบ'); return; }
+  const products = window._scProductCache||[];
+  const invalid = scProductRows.filter(r=>r.product_code && !products.find(p=>p.product_code===r.product_code));
+  if(invalid.length>0){ resultEl.innerHTML = `<div class="err-banner">พบ Product Code ที่ไม่มีใน Master ${invalid.length} รายการ กรุณาแก้ก่อนบันทึก</div>`; return; }
+  const validProducts = scProductRows.filter(r=>r.product_code || r.qty_pcs || r.weight_kg);
   try{
-    const event = await apiCreateProductionEvent(date, area, process, shift, inputs, outputs, {notes});
-    const docGroup = docGroupFor(process);
-    let docHtml = '';
-    if(docGroup) docHtml = await docDetailsHtml(docGroup, event.event_id);
-    resultEl.innerHTML = `<div class="note-banner">บันทึก Event สำเร็จ (Event ID: ${event.event_id.slice(0,8)}...) — สร้าง Output ${outputs.length} รายการ</div>
-      ${docHtml ? `<div class="card"><div class="card-title">แนบเอกสาร Masterlist สำหรับ Event นี้</div>${docHtml}</div>` : ''}`;
-    evtInputTraces = [];
-    evtOutputRows = [{trace_type: DEFAULT_OUTPUT_TRACE_TYPE[process]||'', product_code:'', lot:'', sublot:'', qty:'', weight:'', unit:'', output_type:'MAIN'}];
-    renderSelectedInputs(); renderOutputRows();
+    await apiCreateSpecialcut(date, lot, sublot, part, rmWeight?Number(rmWeight):null, status, null, validProducts);
+    resultEl.innerHTML = `<div class="note-banner">บันทึกสำเร็จ</div>`;
+    renderSpecialcutPage();
   }catch(e){ resultEl.innerHTML = `<div class="err-banner">บันทึกไม่สำเร็จ: ${e.message||'เกิดข้อผิดพลาด'}</div>`; }
 }
 
-/* ================= TRACE QUERY (ใช้ Recursive Backward/Forward ของ Engine ใหม่) ================= */
-async function renderTrace(){
+/* ================= FREEZE - PACK ================= */
+async function renderFreezepackPage(){
+  setLoading();
+  let rows;
+  try{ rows = await apiListFreezepack(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  const tableRows = rows.map(r=>`<tr><td>${r.produced_date}</td><td class="lotcode">${r.lot}</td><td>${r.sublot}</td><td>${r.freezer_no||'-'}</td>
+    <td>${r.weight_in_kg??'-'}</td><td>${r.weight_out_kg??'-'}</td>
+    <td><span class="badge ${r.status==='บรรจุแล้ว'?'badge-pass':'badge-info'}">${r.status}</span></td></tr>`).join('')
+    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">บันทึกข้อมูล Freeze-Pack</div>
+      <div class="form-grid4">
+        <div class="field"><label>วันที่</label><input type="date" id="fpDate" value="${todayStr()}"></div>
+        <div class="field"><label>Lot</label><input type="text" id="fpLot"></div>
+        <div class="field"><label>Sublot</label><input type="text" id="fpSublot"></div>
+        <div class="field"><label>Freezer No.</label><input type="text" id="fpFreezer"></div>
+      </div>
+      <div class="form-grid" style="margin-top:6px;">
+        <div class="field"><label>น้ำหนักเข้า (kg)</label><input type="number" id="fpWeightIn"></div>
+        <div class="field"><label>ปริมาณบรรจุ (kg)</label><input type="number" id="fpWeightOut"></div>
+      </div>
+      <select id="fpStatus" style="max-width:200px;margin-top:6px;"><option>แช่แข็ง</option><option>บรรจุแล้ว</option></select>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('freezepack', null, 'รายงานแช่แข็ง/บรรจุ')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitFreezepack()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
   document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">Genealogy</div>
-    <div class="page-title">Trace Query</div>
-    <div class="page-desc">ไล่ดู Backward (ย้อนกลับ) และ Forward (ไปข้างหน้า) แบบ Recursive เต็มสาย — คลิกแต่ละ Node เพื่อดู Event และเอกสารที่เกี่ยวข้อง</div>
+    <div class="page-eyebrow">สายการผลิต</div>
+    <div class="page-title">FREEZE-PACK — แช่แข็งและบรรจุ</div>
+    ${breadcrumbHtml('freezepack')}
+    <div class="page-desc">บันทึกข้อมูลการแช่แข็งและบรรจุสินค้า</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Freezer</th><th>นน.เข้า</th><th>ปริมาณบรรจุ</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'freezepack',null); });
+}
+async function submitFreezepack(){
+  const date=document.getElementById('fpDate').value, lot=document.getElementById('fpLot').value.trim();
+  const sublot=document.getElementById('fpSublot').value.trim(), freezer=document.getElementById('fpFreezer').value.trim();
+  const weightIn=document.getElementById('fpWeightIn').value, weightOut=document.getElementById('fpWeightOut').value;
+  const status=document.getElementById('fpStatus').value;
+  if(!date||!lot||!sublot){ alert('กรุณากรอก วันที่/Lot/Sublot ให้ครบ'); return; }
+  try{ await apiCreateFreezepack(date,lot,sublot,freezer,weightIn?Number(weightIn):null,weightOut?Number(weightOut):null,status,null); renderFreezepackPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
 
+/* ================= CS (Cold Storage) ================= */
+async function renderCSPage(){
+  setLoading();
+  let rows;
+  try{ rows = await apiListCS(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  const tableRows = rows.map(r=>`<tr><td>${r.received_date}</td><td class="lotcode">${r.lot||'-'}</td><td>${r.sublot||'-'}</td><td>${r.part||'-'}</td>
+    <td>${r.weight_kg??'-'}</td><td>${r.location||'-'}</td><td>${r.temp_c??'-'}</td>
+    <td><span class="badge ${r.status==='เบิกแล้ว'?'badge-warn':'badge-pass'}">${r.status}</span></td></tr>`).join('')
+    || `<tr><td colspan="8"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">1) เริ่มจาก Item สินค้า (ไล่ Backward จากจุดที่ Load/ส่งออกจริง)</div>
-      <div class="page-desc" style="margin-bottom:12px;">ค้นหาด้วย Product Code — ระบบจะไล่ Forward จากทุกจุดที่พบ Product Code นี้ไปจนสุดสาย แล้วให้เริ่ม Backward จาก "จุดปลายทางล่าสุด" (เช่น การส่งมอบ/โหลดสินค้า) ไม่ใช่จุดกลางทางที่บังเอิญเจอ Product Code นี้ติดมา</div>
-      <div class="trace-search">
-        <input type="text" id="tqProductOnly" placeholder="Product Code เช่น 111117302">
-        <button class="btn" onclick="searchTerminalByProduct()">ค้นหาจุดปลายทาง</button>
+      <div class="card-title">บันทึกข้อมูลรับเข้าห้องเย็น</div>
+      <div class="form-grid4">
+        <div class="field"><label>วันที่</label><input type="date" id="csDate" value="${todayStr()}"></div>
+        <div class="field"><label>Lot</label><input type="text" id="csLot"></div>
+        <div class="field"><label>Sublot</label><input type="text" id="csSublot"></div>
+        <div class="field"><label>Part</label><input type="text" id="csPart"></div>
       </div>
-      <div id="tqTerminalResult"></div>
-    </div>
+      <div class="form-grid3" style="margin-top:6px;">
+        <div class="field"><label>น้ำหนัก (kg)</label><input type="number" id="csWeight"></div>
+        <div class="field"><label>ตำแหน่งจัดเก็บ</label><input type="text" id="csLocation" placeholder="เช่น A-01-02"></div>
+        <div class="field"><label>อุณหภูมิ (°C)</label><input type="number" step="0.1" id="csTemp"></div>
+      </div>
+      <select id="csStatus" style="max-width:200px;margin-top:6px;"><option>จัดเก็บ</option><option>เบิกแล้ว</option></select>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('cs', null, 'รายงานรับเข้า/สภาพห้องเย็น')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitCS()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">สายการผลิต</div>
+    <div class="page-title">CS — ห้องเย็น</div>
+    ${breadcrumbHtml('cs')}
+    <div class="page-desc">บันทึกข้อมูลการรับเข้า-จัดเก็บสินค้าในห้องเย็น</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Part</th><th>นน. (kg)</th><th>ตำแหน่ง</th><th>อุณหภูมิ</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'cs',null); });
+}
+async function submitCS(){
+  const date=document.getElementById('csDate').value, lot=document.getElementById('csLot').value.trim();
+  const sublot=document.getElementById('csSublot').value.trim(), part=document.getElementById('csPart').value.trim();
+  const weight=document.getElementById('csWeight').value, location=document.getElementById('csLocation').value.trim();
+  const temp=document.getElementById('csTemp').value, status=document.getElementById('csStatus').value;
+  if(!date){ alert('กรุณากรอกวันที่'); return; }
+  try{ await apiCreateCS(date,lot,sublot,part,weight?Number(weight):null,location,temp?Number(temp):null,status); renderCSPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= LOAD (จัดส่ง) ================= */
+async function renderLoadPage(){
+  setLoading();
+  let rows;
+  try{ rows = await apiListLoad(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
+  const tableRows = rows.map(r=>`<tr><td>${r.load_date}</td><td>${r.customer||'-'}</td><td>${r.part||'-'}</td><td>${r.weight_kg??'-'}</td>
+    <td>${r.truck_no||'-'}</td><td>${r.driver||'-'}</td>
+    <td><span class="badge ${r.status==='จัดส่งแล้ว'?'badge-pass':'badge-warn'}">${r.status}</span></td></tr>`).join('')
+    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">2) หรือค้นหา Trace Unit ทั่วไป (Lot / Sublot / Product Code — ดูจุดไหนก็ได้ในสาย ไม่จำกัดจุดปลายทาง)</div>
-      <div class="trace-search">
-        <input type="text" id="tqLot" placeholder="Lot">
-        <input type="text" id="tqSublot" placeholder="Sublot" style="max-width:120px;">
-        <input type="text" id="tqProduct" placeholder="Product Code" style="max-width:160px;">
-        <button class="btn" onclick="searchTraceUnitsForQuery()">ค้นหา</button>
+      <div class="card-title">บันทึกข้อมูลจัดส่ง</div>
+      <div class="form-grid4">
+        <div class="field"><label>วันที่</label><input type="date" id="loadDate" value="${todayStr()}"></div>
+        <div class="field"><label>ลูกค้า</label><input type="text" id="loadCustomer"></div>
+        <div class="field"><label>Part</label><input type="text" id="loadPart"></div>
+        <div class="field"><label>น้ำหนัก (kg)</label><input type="number" id="loadWeight"></div>
       </div>
-      <div id="tqSearchResult"></div>
-    </div>
-    <div id="tqTraceResult"></div>
-  `;
-}
-async function searchTerminalByProduct(){
-  const productCode = document.getElementById('tqProductOnly').value.trim();
-  const box = document.getElementById('tqTerminalResult');
-  if(!productCode){ box.innerHTML = `<div class="empty-state">กรุณากรอก Product Code</div>`; return; }
-  box.innerHTML = `<div class="empty-state" style="padding:14px;">กำลังไล่หาจุดปลายทาง...</div>`;
-  try{
-    const rows = await rpc('rpc_find_terminal_trace_by_product', {p_session_token:session.token, p_product_code:productCode});
-    if(rows.length===0){ box.innerHTML = `<div class="empty-state">ไม่พบ Trace Unit ที่มี Product Code นี้ในระบบ</div>`; return; }
-    box.innerHTML = rows.map(r=>`
-      <div class="trace-node fg" style="cursor:pointer;" onclick="runTraceQuery('${r.trace_id}')">
-        <div class="st">จุดปลายทางล่าสุด · ${r.trace_type} · ${r.production_date||'-'}</div>
-        <div class="code">Lot ${r.lot||'-'} / Sublot ${r.sublot||'-'} · Product ${r.product_code||'-'}</div>
-      </div>`).join('');
-  }catch(e){ box.innerHTML = `<div class="err-banner">ค้นหาไม่สำเร็จ: ${e.message||'เกิดข้อผิดพลาด'}</div>`; }
-}
-async function searchTraceUnitsForQuery(){
-  const lot=document.getElementById('tqLot').value.trim();
-  const sublot=document.getElementById('tqSublot').value.trim();
-  const product=document.getElementById('tqProduct').value.trim();
-  const box=document.getElementById('tqSearchResult');
-  box.innerHTML=`<div class="empty-state" style="padding:14px;">กำลังค้นหา...</div>`;
-  try{
-    const rows = await apiResolveTraceUnits(lot||null, sublot||null, product||null, null);
-    if(rows.length===0){ box.innerHTML=`<div class="empty-state">ไม่พบ Trace Unit ที่ตรงกับเงื่อนไข</div>`; return; }
-    box.innerHTML = rows.slice(0,30).map(r=>`
-      <div class="trace-node" style="cursor:pointer;" onclick="runTraceQuery('${r.trace_id}')">
-        <div class="st">${r.trace_type} · ${r.production_date||'-'}</div>
-        <div class="code">Lot ${r.lot||'-'} / Sublot ${r.sublot||'-'} ${r.product_code?('· '+r.product_code):''}</div>
-      </div>`).join('');
-  }catch(e){ box.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
-}
-async function runTraceQuery(traceId){
-  const resultEl = document.getElementById('tqTraceResult');
-  resultEl.innerHTML = `<div class="empty-state" style="padding:30px 0;">กำลังไล่ Trace...</div>`;
-  resultEl.scrollIntoView({behavior:'smooth'});
-  let backward, forward;
-  try{ [backward, forward] = await Promise.all([apiTraceBackward(traceId), apiTraceForward(traceId)]); }
-  catch(e){ resultEl.innerHTML = `<div class="err-banner">โหลดข้อมูลไม่สำเร็จ</div>`; return; }
+      <div class="form-grid" style="margin-top:6px;">
+        <div class="field"><label>ทะเบียนรถ</label><input type="text" id="loadTruck"></div>
+        <div class="field"><label>คนขับ</label><input type="text" id="loadDriver"></div>
+      </div>
+      <select id="loadStatus" style="max-width:200px;margin-top:6px;"><option>รอส่ง</option><option>จัดส่งแล้ว</option></select>
+      <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="loadNote"></div>
+      <div style="margin-top:12px;">${docUploadWidgetHtml('load', null, 'ใบส่งของ/เอกสารขนส่ง')}</div>
+      <button class="btn" style="margin-top:12px;" onclick="submitLoad()">บันทึกข้อมูล</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
-  const self = backward.find(x=>x.depth===0) || forward.find(x=>x.depth===0);
-  const backNodes = backward.filter(x=>x.depth>0).sort((a,b)=>b.depth-a.depth);
-  const fwdNodes = forward.filter(x=>x.depth>0).sort((a,b)=>a.depth-b.depth);
-
-  const backHtml = backNodes.map(n=>traceNodeHtml(n)).join('') || `<div class="empty-state">ไม่มี Parent (จุดเริ่มต้นของสาย)</div>`;
-  const fwdHtml = fwdNodes.map(n=>traceNodeHtml(n)).join('') || `<div class="empty-state">ยังไม่มี Child ถัดไป</div>`;
-  const selfHtml = self ? traceNodeHtml(self, true) : '';
-
-  resultEl.innerHTML = `
-    <div class="trace-cols">
-      <div class="trace-col"><h4>ย้อนหลัง (Backward)</h4>${backHtml}</div>
-      <div class="trace-col"><h4>Trace ที่ค้นหา</h4>${selfHtml}<h4 style="margin-top:18px;">ไปข้างหน้า (Forward)</h4>${fwdHtml}</div>
-    </div>
-  `;
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">สายการผลิต</div>
+    <div class="page-title">LOAD — จัดส่ง</div>
+    ${breadcrumbHtml('load')}
+    <div class="page-desc">บันทึกข้อมูลการจัดส่งสินค้าให้ลูกค้า</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
+      <table><thead><tr><th>วันที่</th><th>ลูกค้า</th><th>Part</th><th>นน. (kg)</th><th>ทะเบียนรถ</th><th>คนขับ</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+    </div>`;
+  document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'load',null); });
 }
-function traceNodeHtml(n, isSelf){
-  return `<div class="trace-node ${isSelf?'self':''}" onclick="handleTraceNodeClick(event,'${n.trace_id}')" style="cursor:pointer;">
-    <div class="st">${n.trace_type} ${n.relation_type?('· '+n.relation_type):''} · ${n.production_date||'-'}</div>
-    <div class="code">Lot ${n.lot||'-'} / Sublot ${n.sublot||'-'} ${n.product_code?('· '+n.product_code):''}</div>
-    <div class="expandArea" id="expand-${n.trace_id}" onclick="event.stopPropagation()"></div>
-  </div>`;
-}
-function handleTraceNodeClick(event, traceId){
-  // ถ้าคลิกเกิดขึ้นข้างในส่วนที่ขยายแล้ว (เช่น summary เอกสาร, ลิงก์, ช่องกรอก) อย่า toggle ปิดทั้งก้อน
-  if(event.target.closest('.expandArea')) return;
-  expandTraceNode(traceId);
-}
-async function expandTraceNode(traceId){
-  const area = document.getElementById('expand-'+traceId);
-  if(!area) return;
-  if(area.innerHTML){ area.innerHTML=''; return; }
-  area.innerHTML = `<div class="empty-state" style="padding:8px;">กำลังโหลด...</div>`;
-  try{
-    const events = await apiGetEventTimeline(traceId);
-    if(events.length===0){ area.innerHTML = `<div class="empty-state" style="padding:8px;">ไม่มี Event ที่เกี่ยวข้องกับ Trace นี้</div>`; return; }
-    const parts = await Promise.all(events.map(async ev=>{
-      const docGroup = docGroupFor(ev.process_code);
-      const docHtml = docGroup ? await docDetailsHtml(docGroup, ev.event_id) : '';
-      return `<div class="existing-rec">
-        <div class="st">${ev.role} · ${ev.main_area} / ${ev.process_code} · ${ev.event_date}</div>
-        ${docHtml}
-      </div>`;
-    }));
-    area.innerHTML = parts.join('');
-  }catch(e){ area.innerHTML = `<div class="err-banner">โหลดไม่สำเร็จ</div>`; }
+async function submitLoad(){
+  const date=document.getElementById('loadDate').value, customer=document.getElementById('loadCustomer').value.trim();
+  const part=document.getElementById('loadPart').value.trim(), weight=document.getElementById('loadWeight').value;
+  const truck=document.getElementById('loadTruck').value.trim(), driver=document.getElementById('loadDriver').value.trim();
+  const status=document.getElementById('loadStatus').value, note=document.getElementById('loadNote').value.trim();
+  if(!date||!customer){ alert('กรุณากรอกวันที่และลูกค้า'); return; }
+  try{ await apiCreateLoad(date,customer,part,weight?Number(weight):null,truck,driver,status,note); renderLoadPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
 
-/* ================= Master Data: Product Master ================= */
+/* ================= Farm Master ================= */
+async function renderFarmMasterPage(){
+  setLoading();
+  let farms;
+  try{ farms = await apiListFarmMaster(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  const rows = farms.map(f=>`<tr><td class="lotcode">${f.farm_id}</td><td>${f.farm_name}</td><td>${f.address||'-'}</td><td>${f.contact_phone||'-'}</td>
+    <td>${f.active?'<span class="badge badge-pass">Active</span>':'<span class="badge badge-fail">Inactive</span>'}</td></tr>`).join('')
+    || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Farm Master</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">เพิ่ม/แก้ไข Farm</div>
+      <div class="form-grid">
+        <div class="field"><label>Farm ID</label><input type="text" id="fmId" placeholder="เช่น F001"></div>
+        <div class="field"><label>ชื่อฟาร์ม</label><input type="text" id="fmName"></div>
+        <div class="field"><label>ที่อยู่</label><input type="text" id="fmAddress"></div>
+        <div class="field"><label>เบอร์ติดต่อ</label><input type="text" id="fmPhone"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13.5px;"><input type="checkbox" id="fmActive" checked> Active</label>
+      <button class="btn" style="margin-top:10px;" onclick="saveFarmMaster()">บันทึก</button>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-eyebrow">Master Data</div>
+    <div class="page-title">Farm Master</div>
+    <div class="page-desc">รายชื่อฟาร์มทั้งหมด — ใช้เลือกในหน้า FARM และ LB</div>
+    ${formHtml}
+    <div class="card"><div class="card-title">Farm ทั้งหมด (${farms.length})</div>
+      <table><thead><tr><th>Farm ID</th><th>ชื่อ</th><th>ที่อยู่</th><th>เบอร์ติดต่อ</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+}
+async function saveFarmMaster(){
+  const id=document.getElementById('fmId').value.trim(), name=document.getElementById('fmName').value.trim();
+  const addr=document.getElementById('fmAddress').value.trim(), phone=document.getElementById('fmPhone').value.trim();
+  const active=document.getElementById('fmActive').checked;
+  if(!id||!name){ alert('กรุณากรอก Farm ID และชื่อฟาร์ม'); return; }
+  try{ await apiUpsertFarmMaster(id,name,addr,phone,active); renderFarmMasterPage(); }
+  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+}
+
+/* ================= Product Master ================= */
 async function renderProductMasterPage(){
   setLoading();
   let products;
   try{ products = await apiListProductMaster(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
   products = products.slice().sort((a,b)=>a.product_code.localeCompare(b.product_code));
-  const typeBadge = (t)=>{
-    if(t==='Freeze') return '<span class="badge badge-ccp">Freeze</span>';
-    if(t==='Chill') return '<span class="badge badge-pass">Chill</span>';
-    return '<span class="badge badge-fail">ยังไม่ระบุ</span>';
-  };
+  const typeBadge = (t)=> t==='Freeze' ? '<span class="badge badge-info">Freeze</span>' : (t==='Chill' ? '<span class="badge badge-pass">Chill</span>' : '<span class="badge badge-fail">ยังไม่ระบุ</span>');
   const rows = products.map(p=>`<tr>
     <td class="lotcode">${p.product_code}</td><td>${p.product_name||'-'}</td><td>${p.part||'-'}</td><td>${p.unit||'-'}</td>
     <td>${typeBadge(p.product_type)}</td>
@@ -1027,13 +1251,7 @@ async function renderProductMasterPage(){
         <div class="field"><label>Product Name</label><input type="text" id="pmName"></div>
         <div class="field"><label>Part</label><input type="text" id="pmPart" placeholder="BB / BL / FILLET / WING / CCM"></div>
         <div class="field"><label>Unit</label><input type="text" id="pmUnit"></div>
-        <div class="field"><label>ประเภทสินค้า (Frozen / Chilled)</label>
-          <select id="pmProductType">
-            <option value="">-- ยังไม่ระบุ --</option>
-            <option value="Chill">Chill (แช่เย็น)</option>
-            <option value="Freeze">Freeze (แช่แข็ง)</option>
-          </select>
-        </div>
+        <div class="field"><label>ประเภทสินค้า</label><select id="pmProductType"><option value="">-- ยังไม่ระบุ --</option><option value="Chill">Chill (แช่เย็น)</option><option value="Freeze">Freeze (แช่แข็ง)</option></select></div>
       </div>
       <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13.5px;"><input type="checkbox" id="pmActive" checked> Active</label>
       <button class="btn" style="margin-top:10px;" onclick="saveProductMaster()">บันทึก</button>
@@ -1043,7 +1261,7 @@ async function renderProductMasterPage(){
   document.getElementById('mainContent').innerHTML = `
     <div class="page-eyebrow">Master Data</div>
     <div class="page-title">Product Master</div>
-    <div class="page-desc">รายการ Product Code ทั้งหมด — ใช้ Validate ตอนบันทึก Event (TR-11) ป้องกัน Product Code ผิด/ไม่มีอยู่จริง พร้อมระบุว่าเป็นสินค้า Chill หรือ Freeze</div>
+    <div class="page-desc">รายการ Product Code ทั้งหมด — ใช้ Validate ตอนบันทึกที่ Cut Up และ Special Cut</div>
     ${formHtml}
     <div class="card"><div class="card-title">Product ทั้งหมด (${products.length})</div>
       <table><thead><tr><th>Product Code</th><th>ชื่อ</th><th>Part</th><th>Unit</th><th>ประเภท</th><th>สถานะ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
@@ -1058,8 +1276,7 @@ function editProductMaster(code,name,part,unit,productType,active){
   window.scrollTo(0,0);
 }
 async function saveProductMaster(){
-  const codeEl = document.getElementById('pmCode');
-  const code = codeEl.value.trim();
+  const code = document.getElementById('pmCode').value.trim();
   const name = document.getElementById('pmName').value.trim();
   const part = document.getElementById('pmPart').value.trim();
   const unit = document.getElementById('pmUnit').value.trim();
@@ -1070,211 +1287,62 @@ async function saveProductMaster(){
   catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
 }
 
-/* ================= Master Data: Process Master (Admin only แก้ไข) ================= */
-async function renderProcessMasterPage(){
-  setLoading();
-  let processes;
-  try{ processes = await apiListProcessMaster(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
-  const rows = processes.map(p=>`<tr>
-    <td class="lotcode">${p.process_code}</td><td>${p.process_name||'-'}</td><td>${p.station}</td>
-    <td>${p.active?'<span class="badge badge-pass">Active</span>':'<span class="badge badge-fail">Inactive</span>'}</td>
-    <td>${isAdmin()?`<button class="btn btn-ghost btn-sm" onclick="editProcessMaster('${p.process_code}',${JSON.stringify(p.process_name||'')},${JSON.stringify(p.station||'')},${p.active})">แก้ไข</button>`:''}</td>
-  </tr>`).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Process Master</div></td></tr>`;
-
-  const formHtml = isAdmin() ? `
-    <div class="card">
-      <div class="card-title" id="pcFormTitle">เพิ่ม Process ใหม่</div>
-      <div class="form-grid3">
-        <div class="field"><label>Process Code</label><input type="text" id="pcCode"></div>
-        <div class="field"><label>Process Name</label><input type="text" id="pcName"></div>
-        <div class="field"><label>Station (Main Area)</label><input type="text" id="pcStation"></div>
-      </div>
-      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13.5px;"><input type="checkbox" id="pcActive" checked> Active</label>
-      <button class="btn" style="margin-top:10px;" onclick="saveProcessMaster()">บันทึก</button>
-    </div>` : `<div class="readonly-banner">เมนูนี้แก้ไขได้เฉพาะ Admin</div>`;
-
-  document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">Master Data</div>
-    <div class="page-title">Process Master</div>
-    <div class="page-desc">รายชื่อ Process ทั้งหมดที่ใช้ในหน้า "บันทึก Event" — Admin เพิ่ม/แก้ไขได้ถ้ามี Process ใหม่ที่ยังไม่มีในระบบ</div>
-    ${formHtml}
-    <div class="card"><div class="card-title">Process ทั้งหมด (${processes.length})</div>
-      <table><thead><tr><th>Process Code</th><th>ชื่อ</th><th>Station</th><th>สถานะ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-    </div>`;
-}
-function editProcessMaster(code,name,station,active){
-  document.getElementById('pcFormTitle').textContent = `แก้ไข Process: ${code}`;
-  document.getElementById('pcCode').value = code; document.getElementById('pcCode').disabled = true;
-  document.getElementById('pcName').value = name; document.getElementById('pcStation').value = station;
-  document.getElementById('pcActive').checked = active;
-  window.scrollTo(0,0);
-}
-async function saveProcessMaster(){
-  const code=document.getElementById('pcCode').value.trim();
-  const name=document.getElementById('pcName').value.trim();
-  const station=document.getElementById('pcStation').value.trim();
-  const active=document.getElementById('pcActive').checked;
-  if(!code||!station){ alert('กรุณากรอก Process Code และ Station'); return; }
-  try{ await apiUpsertProcessMaster(code,name,station,active); renderProcessMasterPage(); }
-  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
-}
-
-/* ================= Master Data: Farm / House / Flock ================= */
-async function renderFarmMasterPage(){
-  setLoading();
-  let farms;
-  try{ farms = await apiListFarmHouseFlock(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
-  const rows = farms.map(f=>`<tr><td>${f.flock_date||'-'}</td><td>${f.sublot||'-'}</td><td>${f.farm_id||'-'}</td><td>${f.house_id||'-'}</td><td>${f.feed_lot||'-'}</td><td>${f.breeder_flock||'-'}</td><td>${f.hatchery_batch||'-'}</td></tr>`).join('')
-    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
-
-  const formHtml = canWrite() ? `
-    <div class="card">
-      <div class="card-title">เพิ่มข้อมูลอ้างอิง Farm/House/Flock</div>
-      <div class="form-grid3">
-        <div class="field"><label>วันที่ (Flock Date)</label><input type="date" id="fmDate" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="field"><label>Sub Lot</label><input type="text" id="fmSublot" placeholder="เช่น 1, 99H"></div>
-        <div class="field"><label>Farm ID</label><input type="text" id="fmFarm"></div>
-        <div class="field"><label>House ID</label><input type="text" id="fmHouse"></div>
-        <div class="field"><label>Lot อาหารสัตว์</label><input type="text" id="fmFeed"></div>
-        <div class="field"><label>ฝูงพ่อแม่พันธุ์</label><input type="text" id="fmBreeder"></div>
-        <div class="field"><label>ล็อตโรงฟักไข่</label><input type="text" id="fmHatch"></div>
-      </div>
-      <button class="btn" style="margin-top:10px;" onclick="saveFarmMaster()">บันทึก</button>
-    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
-
-  document.getElementById('mainContent').innerHTML = `
-    <div class="page-eyebrow">Master Data</div>
-    <div class="page-title">Farm / House / Flock</div>
-    <div class="page-desc">ตารางอ้างอิง วันที่+Sub Lot → ฟาร์ม/เล้า/อาหารสัตว์/ฝูงพ่อแม่พันธุ์/โรงฟัก ใช้เชื่อม Trace ย้อนไปถึงต้นน้ำ</div>
-    ${formHtml}
-    <div class="card"><div class="card-title">ทั้งหมด (${farms.length})</div>
-      <table><thead><tr><th>วันที่</th><th>Sub Lot</th><th>Farm</th><th>House</th><th>Lot อาหาร</th><th>ฝูงพ่อแม่พันธุ์</th><th>ล็อตโรงฟัก</th></tr></thead><tbody>${rows}</tbody></table>
-    </div>`;
-}
-async function saveFarmMaster(){
-  const date=document.getElementById('fmDate').value, sublot=document.getElementById('fmSublot').value.trim();
-  const farm=document.getElementById('fmFarm').value.trim(), house=document.getElementById('fmHouse').value.trim();
-  const feed=document.getElementById('fmFeed').value.trim(), breeder=document.getElementById('fmBreeder').value.trim(), hatch=document.getElementById('fmHatch').value.trim();
-  if(!date||!sublot){ alert('กรุณากรอกวันที่และ Sub Lot'); return; }
-  try{ await apiUpsertFarmHouseFlock(farm,house,null,date,sublot,feed,breeder,hatch); renderFarmMasterPage(); }
-  catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
-}
-
+/* ================= Admin: Employees / Audit Log ================= */
 async function renderEmployeesPage(){
   setLoading();
   let list;
   try{ list = await apiListEmployees(); }catch(e){ renderErrorState('ไม่สามารถโหลดรายชื่อผู้ใช้งานได้'); return; }
   const rows = list.map(e=>`<tr>
     <td>${e.employee_code}</td><td>${e.full_name}</td>
-    <td><span class="badge badge-ccp">${ROLE_LABEL[e.role]||e.role}</span></td>
+    <td><span class="badge badge-info">${ROLE_LABEL[e.role]||e.role}</span></td>
     <td>${e.active?'<span class="badge badge-pass">ใช้งานอยู่</span>':'<span class="badge badge-fail">ปิดใช้งาน</span>'}</td>
     <td>${new Date(e.created_at).toLocaleString('th-TH')}</td>
     <td><button class="btn btn-ghost btn-sm" onclick="toggleEmployeeActive('${e.id}', ${!e.active})">${e.active?'ปิดใช้งาน':'เปิดใช้งาน'}</button></td>
   </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีผู้ใช้งาน</div></td></tr>`;
-  document.getElementById('mainContent').innerHTML=`
+  document.getElementById('mainContent').innerHTML = `
     <div class="page-eyebrow">Admin</div>
     <div class="page-title">จัดการผู้ใช้งาน</div>
-    <div class="page-desc">สร้าง User ใหม่และกำหนดบทบาท — เมนูนี้เห็นเฉพาะ Admin เท่านั้น</div>
+    <div class="page-desc">PIN เริ่มต้นของผู้ใช้งานใหม่ทุกคนคือ 12345678 — ระบบจะบังคับให้ตั้ง PIN ใหม่ทันทีที่ Login ครั้งแรก</div>
     <div class="card">
       <div class="card-title">สร้างผู้ใช้งานใหม่</div>
-      <div class="note-banner" style="margin-bottom:14px;">PIN เริ่มต้นของผู้ใช้งานใหม่ทุกคนคือ <b>12345678</b> — ระบบจะบังคับให้ตั้ง PIN ใหม่ทันทีที่ Login ครั้งแรก</div>
       <div class="form-grid">
-        <div class="field"><label>รหัสพนักงาน</label><input type="text" id="empCode" placeholder="เช่น QC1032"></div>
+        <div class="field"><label>รหัสพนักงาน</label><input type="text" id="empCode"></div>
         <div class="field"><label>ชื่อ-นามสกุล</label><input type="text" id="empName"></div>
         <div class="field full"><label>บทบาท</label><select id="empRole">
-          <option value="QC">QC / PRD (บันทึกข้อมูล)</option>
-          <option value="QA">QA / Manager (อ่านอย่างเดียว)</option>
-          <option value="AUDITOR">Auditor (อ่านอย่างเดียว)</option>
-          <option value="ADMIN">Admin (ทำได้ทุกอย่าง)</option>
+          <option value="QC">QC / PRD (บันทึกข้อมูล)</option><option value="QA">QA / Manager (อ่านอย่างเดียว)</option>
+          <option value="AUDITOR">Auditor (อ่านอย่างเดียว)</option><option value="ADMIN">Admin</option>
         </select></div>
       </div>
       <button class="btn" style="margin-top:10px;" onclick="createEmployee()">สร้างผู้ใช้งาน</button>
       <div id="empCreateMsg" style="margin-top:10px;font-size:13px;"></div>
     </div>
-    <div class="card">
-      <div class="card-title">ผู้ใช้งานทั้งหมด (${list.length})</div>
+    <div class="card"><div class="card-title">ผู้ใช้งานทั้งหมด (${list.length})</div>
       <table><thead><tr><th>รหัสพนักงาน</th><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th>สร้างเมื่อ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-    </div>
-  `;
+    </div>`;
 }
 async function createEmployee(){
-  const code=document.getElementById('empCode').value.trim();
-  const name=document.getElementById('empName').value.trim();
-  const role=document.getElementById('empRole').value;
-  const msg=document.getElementById('empCreateMsg');
+  const code=document.getElementById('empCode').value.trim(), name=document.getElementById('empName').value.trim();
+  const role=document.getElementById('empRole').value, msg=document.getElementById('empCreateMsg');
   if(!code||!name){ msg.textContent='กรุณากรอกให้ครบ'; msg.style.color='var(--red-600)'; return; }
-  try{
-    await apiCreateEmployee(code,name,role);
-    msg.textContent='สร้างผู้ใช้งานสำเร็จ — PIN เริ่มต้นคือ 12345678'; msg.style.color='var(--green-700)';
-    renderEmployeesPage();
-  }catch(e){ msg.textContent='สร้างไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด (อาจมีรหัสพนักงานนี้อยู่แล้ว)'); msg.style.color='var(--red-600)'; }
+  try{ await apiCreateEmployee(code,name,role); msg.textContent='สร้างผู้ใช้งานสำเร็จ — PIN เริ่มต้นคือ 12345678'; msg.style.color='var(--green-700)'; renderEmployeesPage(); }
+  catch(e){ msg.textContent='สร้างไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด'); msg.style.color='var(--red-600)'; }
 }
 async function toggleEmployeeActive(id, active){
   try{ await apiSetEmployeeActive(id, active); renderEmployeesPage(); }catch(e){ alert('ทำรายการไม่สำเร็จ'); }
 }
-
-/* ================= Admin: Audit Log ================= */
 async function renderAuditLogPage(){
   setLoading();
   let list;
   try{ list = await apiGetAuditLog(300); }catch(e){ renderErrorState('ไม่สามารถโหลด Audit Log ได้'); return; }
-  const rows = list.map(l=>`<tr>
-    <td>${new Date(l.created_at).toLocaleString('th-TH')}</td>
-    <td>${l.employee_code||'-'}</td>
-    <td><span class="badge badge-ccp">${l.employee_role||'-'}</span></td>
-    <td>${l.action}</td>
-    <td>${l.entity_type||'-'} ${l.entity_id?`<div class="lotsub">${l.entity_id}</div>`:''}</td>
-  </tr>`).join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Log</div></td></tr>`;
-  document.getElementById('mainContent').innerHTML=`
-    <div class="page-eyebrow">Admin</div>
-    <div class="page-title">Audit Log</div>
-    <div class="page-desc">บันทึกทุก action ในระบบ (ล่าสุด 300 รายการ) — เมนูนี้เห็นเฉพาะ Admin เท่านั้น</div>
-    <div class="card"><table><thead><tr><th>เวลา</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>Action</th><th>Entity</th></tr></thead><tbody>${rows}</tbody></table></div>
-  `;
-}
-
-/* ================= Admin: ซ่อนเอกสารจากมุมมอง Auditor ================= */
-const ALL_STATION_KEYS_FOR_DOCS = Object.keys(STATION_DOCS);
-const STATION_LABELS_FOR_DOCS = {
-  farm:'ฟาร์มเลี้ยงไก่ / HATCHERY / FEED', receiving:'LB_RECEIVE (รับไก่เป็น)', evisceration:'EVI_PROCESS (ล้วงเครื่องใน)',
-  chiller:'CHILLER_PROCESS (Chiller-OH)', cutting:'CUTUP_PROCESS (Cut-up)', specialcut:'SPECIAL CUT (SC-BB/BL/FILLET/WING)',
-  bagprep:'BAGPREP (เตรียมถุง)', freezing:'FREEZE (Freezing)', boxing:'BOXING/PACK (ลงกล่อง/บรรจุ FG)',
-  coldstorage:'CS_RECEIVE (Cold Storage)', shipment:'LOAD_SHIP (ส่งมอบ/Loading)',
-};
-async function renderDocVisibilityPage(){
-  setLoading();
-  let hiddenMap;
-  try{ hiddenMap = await loadDocVisibility(true); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
-
-  const sections = ALL_STATION_KEYS_FOR_DOCS.map(stationKey=>{
-    const docs = STATION_DOCS[stationKey]||[];
-    if(docs.length===0) return '';
-    const hiddenCount = docs.filter(d=>hiddenMap[stationKey+'|'+d.no]).length;
-    const rows = docs.map(d=>{
-      const hidden = !!hiddenMap[stationKey+'|'+d.no];
-      return `<label class="doc-item" style="cursor:pointer;">
-        <input type="checkbox" ${hidden?'checked':''} onchange="toggleDocVisibility('${stationKey}','${d.no}',this.checked)">
-        <span><span class="doc-name">#${d.no} ${d.name}</span><span class="doc-meta">${docMetaLine(d)}</span></span>
-      </label>`;
-    }).join('');
-    return `<details class="station-acc">
-      <summary>${STATION_LABELS_FOR_DOCS[stationKey]||stationKey}<span class="acc-count">${hiddenCount>0?`${hiddenCount} ซ่อนอยู่ / `:''}${docs.length} เอกสาร</span></summary>
-      <div class="acc-body"><div class="doclist" style="max-height:none;">${rows}</div></div>
-    </details>`;
-  }).join('');
-
+  const rows = list.map(l=>`<tr><td>${new Date(l.created_at).toLocaleString('th-TH')}</td><td>${l.employee_code||'-'}</td>
+    <td><span class="badge badge-info">${l.employee_role||'-'}</span></td><td>${l.action}</td>
+    <td>${l.entity_type||'-'} ${l.entity_id?`<div style="font-family:monospace;font-size:11px;color:var(--ink-soft);">${l.entity_id}</div>`:''}</td></tr>`).join('')
+    || `<tr><td colspan="5"><div class="empty-state">ยังไม่มี Log</div></td></tr>`;
   document.getElementById('mainContent').innerHTML = `
     <div class="page-eyebrow">Admin</div>
-    <div class="page-title">ซ่อนเอกสารจากมุมมอง Auditor</div>
-    <div class="page-desc">ติ๊กเอกสารที่ไม่ต้องการให้ Auditor เห็น (เช่น เอกสารภายในที่ไม่เกี่ยวกับการตรวจสอบภายนอก) — <b>ไม่กระทบ QC/QA</b> ยังเห็นและกรอกเอกสารครบทุกรายการเหมือนเดิม กระทบเฉพาะสิ่งที่ผู้ใช้บทบาท Auditor มองเห็นเท่านั้น</div>
-    ${sections}
-  `;
-}
-async function toggleDocVisibility(stationKey, docNo, hidden){
-  try{
-    await apiSetDocVisibility(stationKey, docNo, hidden);
-    docVisibilityCache = null;
-  }catch(e){ alert('บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด')); }
+    <div class="page-title">Audit Log</div>
+    <div class="page-desc">บันทึกทุก action ในระบบ (ล่าสุด 300 รายการ)</div>
+    <div class="card"><table><thead><tr><th>เวลา</th><th>รหัสพนักงาน</th><th>บทบาท</th><th>Action</th><th>Entity</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 </script>
 </body>
