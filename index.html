@@ -406,12 +406,14 @@ async function apiListCutup(lot,sublot){ return await rpc('rpc_list_cutup', {p_s
 async function apiListRMMaster(){ return await rpc('rpc_list_rm_master', {p_session_token:session.token}); }
 async function apiUpsertRMMaster(code,name,partGroup,dept,active){ return await rpc('rpc_upsert_rm_master', {p_session_token:session.token, p_rm_code:code, p_rm_name:name, p_part_group:partGroup, p_department:dept, p_active:active}); }
 async function apiListCutupProducts(cutupId){ return await rpc('rpc_list_cutup_products', {p_session_token:session.token, p_cutup_record_id:cutupId}); }
+async function apiListCutupProductDestinations(cutupProductId){ return await rpc('rpc_list_cutup_product_destinations', {p_session_token:session.token, p_cutup_product_id:cutupProductId}); }
 async function apiCreateCutup(chillerLot,sublot,cutDate,note,products){
   return await rpc('rpc_create_cutup', {p_session_token:session.token, p_chiller_lot:chillerLot, p_sublot:sublot, p_cut_date:cutDate, p_note:note, p_products:products});
 }
 // Special Cut
 async function apiListSpecialcut(dept,lot,sublot){ return await rpc('rpc_list_specialcut', {p_session_token:session.token, p_dept:dept||null, p_lot:lot||null, p_sublot:sublot||null}); }
 async function apiListSpecialcutProducts(scId){ return await rpc('rpc_list_specialcut_products', {p_session_token:session.token, p_specialcut_record_id:scId}); }
+async function apiListSpecialcutProductDestinations(scProductId){ return await rpc('rpc_list_specialcut_product_destinations', {p_session_token:session.token, p_specialcut_product_id:scProductId}); }
 async function apiCreateSpecialcut(date,subDept,lot,sublot,rmWeight,status,note,products){
   return await rpc('rpc_create_specialcut', {p_session_token:session.token, p_date:date, p_sub_department:subDept, p_lot:lot, p_sublot:sublot, p_rm_weight:rmWeight, p_status:status, p_note:note, p_products:products});
 }
@@ -543,14 +545,16 @@ async function renderFarmPage(){
   let rows, farms;
   try{ [rows, farms] = await Promise.all([apiListFarmDispatch(), apiListFarmMaster()]); }
   catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  window._farmRowsCache = rows;
   const farmOptions = farms.map(f=>`<option value="${f.farm_id}">${f.farm_id} — ${f.farm_name}</option>`).join('');
-  const tableRows = rows.map(r=>`<tr><td>${r.dispatch_date}</td><td>${farmNameFor(r.farm_id, farms)}</td><td>${r.house||'-'}</td><td>${r.bird_count||'-'}</td>
-    <td>${r.status==='ส่งแล้ว'?'<span class="badge badge-pass">ส่งแล้ว</span>':'<span class="badge badge-warn">รอส่ง</span>'}</td></tr>`).join('')
-    || `<tr><td colspan="5"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  const tableRows = rows.map((r,idx)=>`<tr><td>${r.dispatch_date}</td><td>${farmNameFor(r.farm_id, farms)}</td><td>${r.house||'-'}</td><td>${r.bird_count||'-'}</td>
+    <td>${r.status==='ส่งแล้ว'?'<span class="badge badge-pass">ส่งแล้ว</span>':'<span class="badge badge-warn">รอส่ง</span>'}</td>
+    <td>${canWrite()?`<button class="icon-btn" onclick="editFarmDispatch(${idx})" title="แก้ไข">✏️</button>`:''}</td></tr>`).join('')
+    || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูลนัดส่งไก่</div>
+      <div class="card-title" id="farmFormTitle">บันทึกข้อมูลนัดส่งไก่</div>
       <div class="form-grid4">
         <div class="field"><label>วันที่</label><input type="date" id="farmDate" value="${todayStr()}"></div>
         <div class="field"><label>ฟาร์ม</label><select id="farmSelect">${farmOptions||'<option>ยังไม่มี Farm Master</option>'}</select></div>
@@ -561,7 +565,7 @@ async function renderFarmPage(){
       <div style="margin-top:12px;">
         ${docUploadWidgetHtml('farm', null, 'เอกสารฟาร์ม')}
       </div>
-      <button class="btn" style="margin-top:12px;" onclick="submitFarmDispatch()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitFarmDispatch()">💾 บันทึกข้อมูล (ถ้าวันที่+ฟาร์ม+เล้าตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -569,9 +573,19 @@ async function renderFarmPage(){
     <div class="page-desc">บันทึกข้อมูลการเลี้ยงและส่งไก่เข้าโรงเชือด</div>
     ${formHtml}
     <div class="card"><div class="card-title">รายการนัดส่ง (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>ฟาร์ม</th><th>เล้า</th><th>จำนวน (ตัว)</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>ฟาร์ม</th><th>เล้า</th><th>จำนวน (ตัว)</th><th>สถานะ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'farm',null); });
+}
+function editFarmDispatch(idx){
+  const r = window._farmRowsCache[idx];
+  document.getElementById('farmFormTitle').textContent = 'แก้ไขข้อมูลนัดส่งไก่ (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('farmDate').value = r.dispatch_date;
+  document.getElementById('farmSelect').value = r.farm_id||'';
+  document.getElementById('farmHouse').value = r.house||'';
+  document.getElementById('farmQty').value = r.bird_count||'';
+  document.getElementById('farmStatus').value = r.status;
+  window.scrollTo(0,0);
 }
 async function submitFarmDispatch(){
   const date=document.getElementById('farmDate').value, farmId=document.getElementById('farmSelect').value;
@@ -587,13 +601,15 @@ async function renderFeedPage(){
   setLoading();
   let rows;
   try{ rows = await apiListFeed(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
-  const tableRows = rows.map(r=>`<tr><td>${r.receive_date}</td><td>${r.material_name}</td><td>${r.qty_ton||'-'}</td><td>${r.supplier||'-'}</td><td>${r.lot_no||'-'}</td>
-    <td>${r.status==='รับแล้ว'?'<span class="badge badge-pass">รับแล้ว</span>':'<span class="badge badge-warn">รอตรวจ</span>'}</td></tr>`).join('')
-    || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  window._feedRowsCache = rows;
+  const tableRows = rows.map((r,idx)=>`<tr><td>${r.receive_date}</td><td>${r.material_name}</td><td>${r.qty_ton||'-'}</td><td>${r.supplier||'-'}</td><td>${r.lot_no||'-'}</td>
+    <td>${r.status==='รับแล้ว'?'<span class="badge badge-pass">รับแล้ว</span>':'<span class="badge badge-warn">รอตรวจ</span>'}</td>
+    <td>${canWrite()?`<button class="icon-btn" onclick="editFeed(${idx})" title="แก้ไข">✏️</button>`:''}</td></tr>`).join('')
+    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกรับวัตถุดิบอาหารสัตว์</div>
+      <div class="card-title" id="feedFormTitle">บันทึกรับวัตถุดิบอาหารสัตว์</div>
       <div class="form-grid3">
         <div class="field"><label>วันที่</label><input type="date" id="feedDate" value="${todayStr()}"></div>
         <div class="field"><label>วัตถุดิบ</label><input type="text" id="feedMaterial" placeholder="เช่น ข้าวโพด"></div>
@@ -603,7 +619,7 @@ async function renderFeedPage(){
         <div class="field"><label>สถานะ</label><select id="feedStatus"><option>รอตรวจ</option><option>รับแล้ว</option></select></div>
       </div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('feed', null, 'ผลตรวจ/ใบส่งของ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitFeed()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitFeed()">💾 บันทึกข้อมูล (ถ้าวันที่+วัตถุดิบตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -611,9 +627,20 @@ async function renderFeedPage(){
     <div class="page-desc">บันทึกการรับวัตถุดิบเข้าผลิตอาหารสัตว์</div>
     ${formHtml}
     <div class="card"><div class="card-title">รายการรับวัตถุดิบ (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>วัตถุดิบ</th><th>ปริมาณ (ตัน)</th><th>Supplier</th><th>Lot No.</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>วัตถุดิบ</th><th>ปริมาณ (ตัน)</th><th>Supplier</th><th>Lot No.</th><th>สถานะ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'feed',null); });
+}
+function editFeed(idx){
+  const r = window._feedRowsCache[idx];
+  document.getElementById('feedFormTitle').textContent = 'แก้ไขข้อมูลรับวัตถุดิบ (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('feedDate').value = r.receive_date;
+  document.getElementById('feedMaterial').value = r.material_name||'';
+  document.getElementById('feedQty').value = r.qty_ton||'';
+  document.getElementById('feedSupplier').value = r.supplier||'';
+  document.getElementById('feedLotNo').value = r.lot_no||'';
+  document.getElementById('feedStatus').value = r.status;
+  window.scrollTo(0,0);
 }
 async function submitFeed(){
   const date=document.getElementById('feedDate').value, material=document.getElementById('feedMaterial').value.trim();
@@ -629,13 +656,15 @@ async function renderHatcheryPage(){
   setLoading();
   let rows;
   try{ rows = await apiListHatchery(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
-  const tableRows = rows.map(r=>`<tr><td>${r.hatch_date}</td><td>${r.breed||'-'}</td><td>${r.batch_no||'-'}</td><td>${r.qty||'-'}</td><td>${r.hatch_rate_pct||'-'}%</td><td>${r.farm_dest||'-'}</td>
-    <td><span class="badge ${r.status==='ส่งแล้ว'?'badge-pass':(r.status==='พร้อมส่ง'?'badge-info':'badge-warn')}">${r.status}</span></td></tr>`).join('')
-    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  window._hatchRowsCache = rows;
+  const tableRows = rows.map((r,idx)=>`<tr><td>${r.hatch_date}</td><td>${r.breed||'-'}</td><td>${r.batch_no||'-'}</td><td>${r.qty||'-'}</td><td>${r.hatch_rate_pct||'-'}%</td><td>${r.farm_dest||'-'}</td>
+    <td><span class="badge ${r.status==='ส่งแล้ว'?'badge-pass':(r.status==='พร้อมส่ง'?'badge-info':'badge-warn')}">${r.status}</span></td>
+    <td>${canWrite()?`<button class="icon-btn" onclick="editHatchery(${idx})" title="แก้ไข">✏️</button>`:''}</td></tr>`).join('')
+    || `<tr><td colspan="8"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูลการฟักไข่</div>
+      <div class="card-title" id="hatchFormTitle">บันทึกข้อมูลการฟักไข่</div>
       <div class="form-grid3">
         <div class="field"><label>วันที่</label><input type="date" id="hatchDate" value="${todayStr()}"></div>
         <div class="field"><label>สายพันธุ์</label><input type="text" id="hatchBreed" placeholder="เช่น Ross, Arbor Acres"></div>
@@ -646,7 +675,7 @@ async function renderHatcheryPage(){
       </div>
       <select id="hatchStatus" style="max-width:200px;margin-top:6px;"><option>ฟักไข่</option><option>พร้อมส่ง</option><option>ส่งแล้ว</option></select>
       <div style="margin-top:12px;">${docUploadWidgetHtml('hatchery', null, 'ผลตรวจ/รูปลูกไก่')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitHatchery()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitHatchery()">💾 บันทึกข้อมูล (ถ้าวันที่+Batch No. ตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -654,9 +683,21 @@ async function renderHatcheryPage(){
     <div class="page-desc">บันทึกข้อมูลการผลิตลูกไก่</div>
     ${formHtml}
     <div class="card"><div class="card-title">รายการผลิต (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>สายพันธุ์</th><th>Batch</th><th>จำนวน</th><th>อัตราฟัก</th><th>ฟาร์มปลายทาง</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>สายพันธุ์</th><th>Batch</th><th>จำนวน</th><th>อัตราฟัก</th><th>ฟาร์มปลายทาง</th><th>สถานะ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'hatchery',null); });
+}
+function editHatchery(idx){
+  const r = window._hatchRowsCache[idx];
+  document.getElementById('hatchFormTitle').textContent = 'แก้ไขข้อมูลการฟักไข่ (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('hatchDate').value = r.hatch_date;
+  document.getElementById('hatchBreed').value = r.breed||'';
+  document.getElementById('hatchBatch').value = r.batch_no||'';
+  document.getElementById('hatchQty').value = r.qty||'';
+  document.getElementById('hatchRate').value = r.hatch_rate_pct||'';
+  document.getElementById('hatchFarmDest').value = r.farm_dest||'';
+  document.getElementById('hatchStatus').value = r.status;
+  window.scrollTo(0,0);
 }
 async function submitHatchery(){
   const date=document.getElementById('hatchDate').value, breed=document.getElementById('hatchBreed').value.trim();
@@ -677,16 +718,18 @@ async function renderLBPage(searchLot){
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
   const farmOptions = farms.map(f=>`<option value="${f.farm_id}">${f.farm_id} — ${f.farm_name}</option>`).join('');
 
-  const tableRows = rows.map(r=>`<tr>
+  const tableRows = rows.map((r,idx)=>`<tr>
     <td>${r.received_date}</td><td class="lotcode">${r.lb_lot_code}</td><td>${r.sublot}</td>
     <td>${farmNameFor(r.farm_id, farms)}</td><td>${r.house||'-'}</td><td>${r.flock_batch||'-'}</td>
     <td>${r.received_qty}</td><td>${r.avg_weight_kg||'-'}</td><td>${r.dead_on_arrival_qty||0}</td>
     <td>${r.head_weight_kg??'-'} (${r.head_pct??6}%)</td><td>${r.feather_weight_kg??'-'} (${r.feather_pct??4}%)</td>
-  </tr>`).join('') || `<tr><td colspan="11"><div class="empty-state">${searchLot?`ไม่พบ Lot ที่ตรงกับ "${searchLot}"`:'ยังไม่มีข้อมูล'}</div></td></tr>`;
+    <td>${canWrite()?`<button class="icon-btn" onclick="editLB(${idx})" title="แก้ไข">✏️</button>`:''}</td>
+  </tr>`).join('') || `<tr><td colspan="12"><div class="empty-state">${searchLot?`ไม่พบ Lot ที่ตรงกับ "${searchLot}"`:'ยังไม่มีข้อมูล'}</div></td></tr>`;
+  window._lbRowsCache = rows;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูลรับไก่เป็น</div>
+      <div class="card-title" id="lbFormTitle">บันทึกข้อมูลรับไก่เป็น</div>
       <div class="form-grid3">
         <div class="field"><label>วันที่เข้าเชือด</label><input type="date" id="lbDate" value="${todayStr()}"></div>
         <div class="field"><label>ฟาร์ม</label><select id="lbFarm">${farmOptions||'<option>ยังไม่มี Farm Master</option>'}</select></div>
@@ -708,7 +751,7 @@ async function renderLBPage(searchLot){
       <div class="calc-note">ค่าเหล่านี้คำนวณอัตโนมัติจาก % ที่กำหนด แต่แก้ไขเองได้ถ้าชั่งจริงได้ค่าต่างไป</div>
       <div class="field full" style="margin-top:10px;"><label>หมายเหตุ</label><input type="text" id="lbNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('lb', null, 'เอกสารรับไก่')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitLB()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitLB()">💾 บันทึกข้อมูล (ถ้า Sublot+ฟาร์ม+เล้าตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -723,9 +766,27 @@ async function renderLBPage(searchLot){
         <button class="btn btn-sm" onclick="searchLB()">🔍 ค้นหา</button>
         <button class="btn btn-ghost btn-sm" onclick="renderLBPage()">ล้างการค้นหา</button>
       </div>
-      <table><thead><tr><th>วันที่</th><th>LB Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เล้า</th><th>Flock</th><th>จำนวนรับ</th><th>นน.เฉลี่ย</th><th>ตายทั้งหมด</th><th>หัวไก่</th><th>ขนไก่</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>LB Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เล้า</th><th>Flock</th><th>จำนวนรับ</th><th>นน.เฉลี่ย</th><th>ตายทั้งหมด</th><th>หัวไก่</th><th>ขนไก่</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'lb',null); });
+}
+function editLB(idx){
+  const r = window._lbRowsCache[idx];
+  document.getElementById('lbFormTitle').textContent = 'แก้ไขข้อมูลรับไก่เป็น (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('lbDate').value = r.received_date;
+  document.getElementById('lbFarm').value = r.farm_id||'';
+  document.getElementById('lbHouse').value = r.house||'';
+  document.getElementById('lbFlock').value = r.flock_batch||'';
+  document.getElementById('lbSublot').value = r.sublot;
+  document.getElementById('lbQty').value = r.received_qty;
+  document.getElementById('lbAvgWeight').value = r.avg_weight_kg||'';
+  document.getElementById('lbDoa').value = r.dead_on_arrival_qty||0;
+  document.getElementById('lbHeadPct').value = r.head_pct??6;
+  document.getElementById('lbHeadWeight').value = r.head_weight_kg||'';
+  document.getElementById('lbFeatherPct').value = r.feather_pct??4;
+  document.getElementById('lbFeatherWeight').value = r.feather_weight_kg||'';
+  document.getElementById('lbNote').value = r.note||'';
+  window.scrollTo(0,0);
 }
 function recalcLBByproducts(){
   const qty = Number(document.getElementById('lbQty').value||0);
@@ -768,17 +829,19 @@ async function renderEVIPage(searchLot){
   eviByproductRows = EVI_BYPRODUCT_DEFAULTS.map(name=>({product_name:name, qty_kg:'', qty_pcs:'', note:''}));
   eviByproductRows.push({product_name:'อื่นๆ (ระบุ)', qty_kg:'', qty_pcs:'', note:''});
 
-  const tableRows = rows.map(r=>`<tr>
+  const tableRows = rows.map((r,idx)=>`<tr>
     <td class="lotcode">${r.lb_lot_code}</td><td>${r.sublot}</td>
     <td>${r.entering_slaughter_qty??'-'}</td><td>${r.condemn_qty??0}</td><td>${r.partial_qty??0}</td>
     <td><b>${r.entering_chiller_qty??'-'}</b></td>
     <td>${r.intestine_weight_kg??'-'} (${r.intestine_pct??4}%)</td>
     <td>${r.ccp1_result==='ผ่าน'?'<span class="badge badge-pass">ผ่าน</span>':(r.ccp1_result==='ไม่ผ่าน'?'<span class="badge badge-fail">ไม่ผ่าน</span>':'-')}</td>
-  </tr>`).join('') || `<tr><td colspan="8"><div class="empty-state">${searchLot?`ไม่พบ Lot ที่ตรงกับ "${searchLot}"`:'ยังไม่มีข้อมูล'}</div></td></tr>`;
+    <td>${canWrite()?`<button class="icon-btn" onclick="editEVI(${idx})" title="แก้ไข">✏️</button>`:''}</td>
+  </tr>`).join('') || `<tr><td colspan="9"><div class="empty-state">${searchLot?`ไม่พบ Lot ที่ตรงกับ "${searchLot}"`:'ยังไม่มีข้อมูล'}</div></td></tr>`;
+  window._eviRowsCache = rows;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูลล้วงเครื่องใน (ดึงอ้างอิงจาก LB)</div>
+      <div class="card-title" id="eviFormTitle">บันทึกข้อมูลล้วงเครื่องใน (ดึงอ้างอิงจาก LB)</div>
       <div class="form-grid3">
         <div class="field"><label>LB Lot</label><input type="text" id="eviLbLot" placeholder="เช่น 2569227"></div>
         <div class="field"><label>Sublot</label><input type="text" id="eviSublot" placeholder="เช่น 01"></div>
@@ -809,7 +872,7 @@ async function renderEVIPage(searchLot){
       <div id="eviByproductRows"></div>
 
       <div style="margin-top:12px;">${docUploadWidgetHtml('evi', null, 'เอกสารแบบ/รายงาน/รูปภาพ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitEVI()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitEVI()">💾 บันทึกข้อมูล (ถ้า Lot+Sublot ตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -824,10 +887,33 @@ async function renderEVIPage(searchLot){
         <button class="btn btn-sm" onclick="document.getElementById('eviSearchLot').value && renderEVIPage(document.getElementById('eviSearchLot').value.trim())">🔍 ค้นหา</button>
         <button class="btn btn-ghost btn-sm" onclick="renderEVIPage()">ล้างการค้นหา</button>
       </div>
-      <table><thead><tr><th>LB Lot</th><th>Sublot</th><th>เข้าเชือด</th><th>Condemn</th><th>Partial</th><th>เข้า Chiller</th><th>ไส้</th><th>CCP1</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>LB Lot</th><th>Sublot</th><th>เข้าเชือด</th><th>Condemn</th><th>Partial</th><th>เข้า Chiller</th><th>ไส้</th><th>CCP1</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   renderEVIByproductRows();
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'evi',null); });
+}
+async function editEVI(idx){
+  const r = window._eviRowsCache[idx];
+  document.getElementById('eviFormTitle').textContent = 'แก้ไขข้อมูล EVI (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('eviLbLot').value = r.lb_lot_code;
+  document.getElementById('eviSublot').value = r.sublot;
+  await fetchLBForEVI();
+  document.getElementById('eviCondemn').value = r.condemn_qty||0;
+  document.getElementById('eviPartial').value = r.partial_qty||0;
+  document.getElementById('eviEnteringSlaughter').value = r.entering_slaughter_qty??'';
+  document.getElementById('eviEnteringChiller').value = r.entering_chiller_qty??'';
+  document.getElementById('eviCcp1').value = r.ccp1_result||'';
+  document.getElementById('eviNote').value = r.note||'';
+  document.getElementById('eviIntestinePct').value = r.intestine_pct??4;
+  document.getElementById('eviIntestineWeight').value = r.intestine_weight_kg||'';
+  try{
+    const bps = await apiListEVIByproducts(r.id);
+    if(bps.length>0){
+      eviByproductRows = bps.map(b=>({product_name:b.product_name, qty_kg:b.qty_kg||'', qty_pcs:b.qty_pcs||'', note:b.note||''}));
+      renderEVIByproductRows();
+    }
+  }catch(e){}
+  window.scrollTo(0,0);
 }
 window._eviLbData = null;
 async function fetchLBForEVI(){
@@ -904,16 +990,18 @@ async function renderChillerPage(){
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
 
   const ccp2Badge = (v)=> v==='ผ่าน' ? '<span class="badge badge-pass">ผ่าน</span>' : (v==='ไม่ผ่าน' ? '<span class="badge badge-fail">ไม่ผ่าน</span>' : '-');
-  const tableRows = rows.map(r=>`<tr>
+  const tableRows = rows.map((r,idx)=>`<tr>
     <td class="lotcode">${r.evi_lot_code}</td><td>${r.sublot}</td><td>${farmNameFor(r.farm_id, farms)}</td>
     <td>${r.entering_qty??'-'}</td><td>${r.exit_qty??'-'}</td>
     <td>${r.to_wholebird_qty??'-'}</td><td>${r.to_cutup_qty??'-'}</td><td>${ccp2Badge(r.ccp2_result)}</td>
     <td>${r.note||'-'}</td>
-  </tr>`).join('') || `<tr><td colspan="9"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+    <td>${canWrite()?`<button class="icon-btn" onclick="editChiller(${idx})" title="แก้ไข">✏️</button>`:''}</td>
+  </tr>`).join('') || `<tr><td colspan="10"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  window._chillerRowsCache = rows;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูล Chiller-OH (ดึงอ้างอิงจาก EVI)</div>
+      <div class="card-title" id="chillerFormTitle">บันทึกข้อมูล Chiller-OH (ดึงอ้างอิงจาก EVI)</div>
       <div class="form-grid3">
         <div class="field"><label>EVI Lot</label><input type="text" id="chillerLot" placeholder="เช่น 2569227"></div>
         <div class="field"><label>Sublot</label><input type="text" id="chillerSublot" placeholder="เช่น 01"></div>
@@ -932,7 +1020,7 @@ async function renderChillerPage(){
       <div id="chillerBalanceNote" style="font-size:12.5px;margin-top:4px;"></div>
       <div class="field full" style="margin-top:6px;"><label>หมายเหตุ <span id="chillerNoteRequiredMark" style="display:none;color:var(--red-600);">* บังคับกรอกเพราะยอดไม่ Balance</span></label><input type="text" id="chillerNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('chiller', null, 'เอกสาร/รายงาน CCP2')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitChiller()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitChiller()">💾 บันทึกข้อมูล (ถ้า Lot+Sublot ตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -941,9 +1029,23 @@ async function renderChillerPage(){
     <div class="page-desc">บันทึกข้อมูลการนำซากเข้า-ออกจาก Chiller และแยกเส้นทางไปสินค้าไก่ตัว/Cut-up</div>
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>EVI Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เข้า Chiller</th><th>ออก</th><th>ไปไก่ตัว</th><th>ไป Cut-up</th><th>CCP2</th><th>หมายเหตุ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>EVI Lot</th><th>Sublot</th><th>ฟาร์ม</th><th>เข้า Chiller</th><th>ออก</th><th>ไปไก่ตัว</th><th>ไป Cut-up</th><th>CCP2</th><th>หมายเหตุ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'chiller',null); });
+}
+async function editChiller(idx){
+  const r = window._chillerRowsCache[idx];
+  document.getElementById('chillerFormTitle').textContent = 'แก้ไขข้อมูล Chiller-OH (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('chillerLot').value = r.evi_lot_code;
+  document.getElementById('chillerSublot').value = r.sublot;
+  await fetchEVIForChiller();
+  document.getElementById('chillerExitQty').value = r.exit_qty??'';
+  document.getElementById('chillerCcp2').value = r.ccp2_result||'';
+  document.getElementById('chillerToWholebird').value = r.to_wholebird_qty??'';
+  document.getElementById('chillerToCutup').value = r.to_cutup_qty??'';
+  document.getElementById('chillerNote').value = r.note||'';
+  checkChillerBalance();
+  window.scrollTo(0,0);
 }
 async function fetchEVIForChiller(){
   const lot=document.getElementById('chillerLot').value.trim(), sublot=document.getElementById('chillerSublot').value.trim();
@@ -1022,17 +1124,19 @@ async function renderCutupPage(){
   window._rmMasterCache = rmItems;
   cutupProductRows = [{rm_code:'', total_weight_kg:'', destinations:[{dept:'', weight_kg:''}]}];
 
-  const rowParts = await Promise.all(rows.map(async r=>{
+  const rowParts = await Promise.all(rows.map(async (r,idx)=>{
     let prods=[]; try{ prods = await apiListCutupProducts(r.id); }catch(e){}
     const totalWeight = prods.reduce((s,p)=>s+(Number(p.weight_kg)||0),0);
     return `<tr><td>${r.cut_date||'-'}</td><td class="lotcode">${r.chiller_lot_code}</td><td>${r.sublot}</td>
-      <td>${prods.length} รายการ</td><td>${totalWeight.toFixed(1)}</td></tr>`;
+      <td>${prods.length} รายการ</td><td>${totalWeight.toFixed(1)}</td>
+      <td>${canWrite()?`<button class="icon-btn" onclick="editCutup(${idx})" title="แก้ไข">✏️</button>`:''}</td></tr>`;
   }));
-  const tableRows = rowParts.join('') || `<tr><td colspan="5"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  const tableRows = rowParts.join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  window._cutupRowsCache = rows;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกผลผลิตหลังการชำแหละ (ดึงอ้างอิงจาก Chiller-OH)</div>
+      <div class="card-title" id="cutupFormTitle">บันทึกผลผลิตหลังการชำแหละ (ดึงอ้างอิงจาก Chiller-OH)</div>
       <div class="form-grid3">
         <div class="field"><label>Chiller Lot</label><input type="text" id="cutupLot" placeholder="เช่น 2569227"></div>
         <div class="field"><label>Sublot</label><input type="text" id="cutupSublot" placeholder="เช่น 01"></div>
@@ -1047,7 +1151,7 @@ async function renderCutupPage(){
 
       <div class="field full" style="margin-top:14px;"><label>หมายเหตุ</label><input type="text" id="cutupNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('cutup', null, 'สรุปผลผลิต/รูปภาพ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitCutup()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitCutup()">💾 บันทึกข้อมูล (ถ้า Lot+Sublot+วันที่ตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -1056,10 +1160,34 @@ async function renderCutupPage(){
     <div class="page-desc">บันทึกผลผลิตแยกชิ้นส่วน (RM) จากซากไก่ตาม 6 กลุ่ม: BL / BB / Fillet / Wings / Carcass / Fat — 1 ชิ้นส่วนแยกส่งได้หลายแผนกปลายทางพร้อมระบุปริมาณ</div>
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>Chiller Lot</th><th>Sublot</th><th>รายการ RM</th><th>รวม (kg)</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>Chiller Lot</th><th>Sublot</th><th>รายการ RM</th><th>รวม (kg)</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   renderCutupProductRows();
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'cutup',null); });
+}
+async function editCutup(idx){
+  const r = window._cutupRowsCache[idx];
+  document.getElementById('cutupFormTitle').textContent = 'แก้ไขข้อมูล Cut Up (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('cutupLot').value = r.chiller_lot_code;
+  document.getElementById('cutupSublot').value = r.sublot;
+  await fetchChillerForCutup();
+  document.getElementById('cutupDate').value = r.cut_date||todayStr();
+  document.getElementById('cutupNote').value = r.note||'';
+  try{
+    const prods = await apiListCutupProducts(r.id);
+    if(prods.length>0){
+      const withDest = await Promise.all(prods.map(async p=>{
+        let dests=[]; try{ dests = await apiListCutupProductDestinations(p.id); }catch(e){}
+        return {
+          rm_code: p.product_code, total_weight_kg: p.weight_kg||'',
+          destinations: dests.length>0 ? dests.map(d=>({dept:d.destination_dept, weight_kg:d.weight_kg||''})) : [{dept:'', weight_kg:''}]
+        };
+      }));
+      cutupProductRows = withDest;
+      renderCutupProductRows();
+    }
+  }catch(e){}
+  window.scrollTo(0,0);
 }
 async function fetchChillerForCutup(){
   const lot=document.getElementById('cutupLot').value.trim(), sublot=document.getElementById('cutupSublot').value.trim();
@@ -1165,20 +1293,22 @@ async function renderSpecialcutPage(){
   scProductRows = [{inprocess_code:'', qty_pcs:'', weight_kg:'', destinations:[{dept:'', weight_kg:''}]}];
   window._scRmReceived = null;
 
-  const rowParts = await Promise.all(rows.map(async r=>{
+  const rowParts = await Promise.all(rows.map(async (r,idx)=>{
     let prods=[]; try{ prods = await apiListSpecialcutProducts(r.id); }catch(e){}
     const totalWeight = prods.reduce((s,p)=>s+(Number(p.weight_kg)||0),0);
     return `<tr><td>${r.produced_date}</td><td class="lotcode">${r.lot}</td><td>${r.sublot}</td>
       <td>${prods.length} รายการ</td><td>${totalWeight.toFixed(1)}</td>
-      <td><span class="badge ${r.status==='พร้อมบันทึก'?'badge-pass':'badge-warn'}">${r.status}</span></td></tr>`;
+      <td><span class="badge ${r.status==='พร้อมบันทึก'?'badge-pass':'badge-warn'}">${r.status}</span></td>
+      <td>${canWrite()?`<button class="icon-btn" onclick="editSpecialcut(${idx})" title="แก้ไข">✏️</button>`:''}</td></tr>`;
   }));
-  const tableRows = rowParts.join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  const tableRows = rowParts.join('') || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  window._scRowsCache = rows;
 
   const tabsHtml = `<div class="tabs">${SC_SUBDEPTS.map(d=>`<div class="tab-btn ${d===scCurrentDept?'active':''}" onclick="switchSCDept('${d}')">${d}</div>`).join('')}</div>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">รับ RM จาก Cut Up (แผนก ${scCurrentDept})</div>
+      <div class="card-title" id="scFormTitle">รับ RM จาก Cut Up (แผนก ${scCurrentDept})</div>
       <div class="form-grid3">
         <div class="field"><label>Cut Up Lot</label><input type="text" id="scLot" placeholder="เช่น 2569227"></div>
         <div class="field"><label>Sublot</label><input type="text" id="scSublot" placeholder="เช่น 01"></div>
@@ -1197,7 +1327,7 @@ async function renderSpecialcutPage(){
 
       <div class="field full" style="margin-top:14px;"><label>หมายเหตุ</label><input type="text" id="scNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('specialcut', null, 'รายงานผลผลิต/รูปภาพ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitSpecialcut()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitSpecialcut()">💾 บันทึกข้อมูล (ถ้าแผนก+Lot+Sublot+วันที่ตรงกับรายการเดิม จะเขียนทับ)</button>
       <div id="scSubmitResult" style="margin-top:10px;"></div>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
@@ -1208,10 +1338,36 @@ async function renderSpecialcutPage(){
     ${tabsHtml}
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length}) — แผนก ${scCurrentDept}</div>
-      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>รายการ Code</th><th>รวม (kg)</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>รายการ Code</th><th>รวม (kg)</th><th>สถานะ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   renderSCProductRows();
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'specialcut',null); });
+}
+async function editSpecialcut(idx){
+  const r = window._scRowsCache[idx];
+  document.getElementById('scFormTitle').textContent = `แก้ไขข้อมูล Special Cut (แผนก ${scCurrentDept}) — บันทึกแล้วจะเขียนทับรายการเดิม`;
+  document.getElementById('scLot').value = r.lot;
+  document.getElementById('scSublot').value = r.sublot;
+  await fetchRMForSC();
+  document.getElementById('scDate').value = r.produced_date;
+  document.getElementById('scStatus').value = r.status;
+  document.getElementById('scNote').value = r.note||'';
+  window._scRmReceived = window._scRmReceived || {lot:r.lot, sublot:r.sublot, items:[]};
+  try{
+    const prods = await apiListSpecialcutProducts(r.id);
+    if(prods.length>0){
+      const withDest = await Promise.all(prods.map(async p=>{
+        let dests=[]; try{ dests = await apiListSpecialcutProductDestinations(p.id); }catch(e){}
+        return {
+          inprocess_code: p.product_code, qty_pcs: p.qty_pcs||'', weight_kg: p.weight_kg||'',
+          destinations: dests.length>0 ? dests.map(d=>({dept:d.destination_dept, weight_kg:d.weight_kg||''})) : [{dept:'', weight_kg:''}]
+        };
+      }));
+      scProductRows = withDest;
+      renderSCProductRows();
+    }
+  }catch(e){}
+  window.scrollTo(0,0);
 }
 function switchSCDept(dept){ scCurrentDept = dept; renderSpecialcutPage(); }
 function expandInProcessDeep(ipCode, weight){
@@ -1312,14 +1468,16 @@ async function renderFreezepackPage(){
   let rows;
   try{ rows = await apiListFreezepack(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
-  const tableRows = rows.map(r=>`<tr><td>${r.produced_date}</td><td class="lotcode">${r.lot}</td><td>${r.sublot}</td><td>${r.freezer_no||'-'}</td>
+  window._fpRowsCache = rows;
+  const tableRows = rows.map((r,idx)=>`<tr><td>${r.produced_date}</td><td class="lotcode">${r.lot}</td><td>${r.sublot}</td><td>${r.freezer_no||'-'}</td>
     <td>${r.weight_in_kg??'-'}</td><td>${r.weight_out_kg??'-'}</td>
-    <td><span class="badge ${r.status==='บรรจุแล้ว'?'badge-pass':'badge-info'}">${r.status}</span></td></tr>`).join('')
-    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+    <td><span class="badge ${r.status==='บรรจุแล้ว'?'badge-pass':'badge-info'}">${r.status}</span></td>
+    <td>${canWrite()?`<button class="icon-btn" onclick="editFreezepack(${idx})" title="แก้ไข">✏️</button>`:''}</td></tr>`).join('')
+    || `<tr><td colspan="8"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูล Freeze-Pack</div>
+      <div class="card-title" id="fpFormTitle">บันทึกข้อมูล Freeze-Pack</div>
       <div class="form-grid4">
         <div class="field"><label>วันที่</label><input type="date" id="fpDate" value="${todayStr()}"></div>
         <div class="field"><label>Lot</label><input type="text" id="fpLot"></div>
@@ -1332,7 +1490,7 @@ async function renderFreezepackPage(){
       </div>
       <select id="fpStatus" style="max-width:200px;margin-top:6px;"><option>แช่แข็ง</option><option>บรรจุแล้ว</option></select>
       <div style="margin-top:12px;">${docUploadWidgetHtml('freezepack', null, 'รายงานแช่แข็ง/บรรจุ')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitFreezepack()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitFreezepack()">💾 บันทึกข้อมูล (ถ้า Lot+Sublot+วันที่ตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -1341,9 +1499,21 @@ async function renderFreezepackPage(){
     <div class="page-desc">บันทึกข้อมูลการแช่แข็งและบรรจุสินค้า</div>
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Freezer</th><th>นน.เข้า</th><th>ปริมาณบรรจุ</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Freezer</th><th>นน.เข้า</th><th>ปริมาณบรรจุ</th><th>สถานะ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'freezepack',null); });
+}
+function editFreezepack(idx){
+  const r = window._fpRowsCache[idx];
+  document.getElementById('fpFormTitle').textContent = 'แก้ไขข้อมูล Freeze-Pack (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('fpDate').value = r.produced_date;
+  document.getElementById('fpLot').value = r.lot;
+  document.getElementById('fpSublot').value = r.sublot;
+  document.getElementById('fpFreezer').value = r.freezer_no||'';
+  document.getElementById('fpWeightIn').value = r.weight_in_kg||'';
+  document.getElementById('fpWeightOut').value = r.weight_out_kg||'';
+  document.getElementById('fpStatus').value = r.status;
+  window.scrollTo(0,0);
 }
 async function submitFreezepack(){
   const date=document.getElementById('fpDate').value, lot=document.getElementById('fpLot').value.trim();
@@ -1361,14 +1531,16 @@ async function renderCSPage(){
   let rows;
   try{ rows = await apiListCS(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
-  const tableRows = rows.map(r=>`<tr><td>${r.received_date}</td><td class="lotcode">${r.lot||'-'}</td><td>${r.sublot||'-'}</td><td>${r.part||'-'}</td>
+  window._csRowsCache = rows;
+  const tableRows = rows.map((r,idx)=>`<tr><td>${r.received_date}</td><td class="lotcode">${r.lot||'-'}</td><td>${r.sublot||'-'}</td><td>${r.part||'-'}</td>
     <td>${r.weight_kg??'-'}</td><td>${r.location||'-'}</td><td>${r.temp_c??'-'}</td>
-    <td><span class="badge ${r.status==='เบิกแล้ว'?'badge-warn':'badge-pass'}">${r.status}</span></td></tr>`).join('')
-    || `<tr><td colspan="8"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+    <td><span class="badge ${r.status==='เบิกแล้ว'?'badge-warn':'badge-pass'}">${r.status}</span></td>
+    <td>${canWrite()?`<button class="icon-btn" onclick="editCS(${idx})" title="แก้ไข">✏️</button>`:''}</td></tr>`).join('')
+    || `<tr><td colspan="9"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูลรับเข้าห้องเย็น</div>
+      <div class="card-title" id="csFormTitle">บันทึกข้อมูลรับเข้าห้องเย็น</div>
       <div class="form-grid4">
         <div class="field"><label>วันที่</label><input type="date" id="csDate" value="${todayStr()}"></div>
         <div class="field"><label>Lot</label><input type="text" id="csLot"></div>
@@ -1382,7 +1554,7 @@ async function renderCSPage(){
       </div>
       <select id="csStatus" style="max-width:200px;margin-top:6px;"><option>จัดเก็บ</option><option>เบิกแล้ว</option></select>
       <div style="margin-top:12px;">${docUploadWidgetHtml('cs', null, 'รายงานรับเข้า/สภาพห้องเย็น')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitCS()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitCS()">💾 บันทึกข้อมูล (ถ้า Lot+Sublot+วันที่ตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -1391,9 +1563,22 @@ async function renderCSPage(){
     <div class="page-desc">บันทึกข้อมูลการรับเข้า-จัดเก็บสินค้าในห้องเย็น</div>
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Part</th><th>นน. (kg)</th><th>ตำแหน่ง</th><th>อุณหภูมิ</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Part</th><th>นน. (kg)</th><th>ตำแหน่ง</th><th>อุณหภูมิ</th><th>สถานะ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'cs',null); });
+}
+function editCS(idx){
+  const r = window._csRowsCache[idx];
+  document.getElementById('csFormTitle').textContent = 'แก้ไขข้อมูลห้องเย็น (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('csDate').value = r.received_date;
+  document.getElementById('csLot').value = r.lot||'';
+  document.getElementById('csSublot').value = r.sublot||'';
+  document.getElementById('csPart').value = r.part||'';
+  document.getElementById('csWeight').value = r.weight_kg||'';
+  document.getElementById('csLocation').value = r.location||'';
+  document.getElementById('csTemp').value = r.temp_c||'';
+  document.getElementById('csStatus').value = r.status;
+  window.scrollTo(0,0);
 }
 async function submitCS(){
   const date=document.getElementById('csDate').value, lot=document.getElementById('csLot').value.trim();
@@ -1411,14 +1596,16 @@ async function renderLoadPage(){
   let rows;
   try{ rows = await apiListLoad(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
-  const tableRows = rows.map(r=>`<tr><td>${r.load_date}</td><td>${r.customer||'-'}</td><td>${r.part||'-'}</td><td>${r.weight_kg??'-'}</td>
+  window._loadRowsCache = rows;
+  const tableRows = rows.map((r,idx)=>`<tr><td>${r.load_date}</td><td>${r.customer||'-'}</td><td>${r.part||'-'}</td><td>${r.weight_kg??'-'}</td>
     <td>${r.truck_no||'-'}</td><td>${r.driver||'-'}</td>
-    <td><span class="badge ${r.status==='จัดส่งแล้ว'?'badge-pass':'badge-warn'}">${r.status}</span></td></tr>`).join('')
-    || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+    <td><span class="badge ${r.status==='จัดส่งแล้ว'?'badge-pass':'badge-warn'}">${r.status}</span></td>
+    <td>${canWrite()?`<button class="icon-btn" onclick="editLoad(${idx})" title="แก้ไข">✏️</button>`:''}</td></tr>`).join('')
+    || `<tr><td colspan="8"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูลจัดส่ง</div>
+      <div class="card-title" id="loadFormTitle">บันทึกข้อมูลจัดส่ง</div>
       <div class="form-grid4">
         <div class="field"><label>วันที่</label><input type="date" id="loadDate" value="${todayStr()}"></div>
         <div class="field"><label>ลูกค้า</label><input type="text" id="loadCustomer"></div>
@@ -1432,7 +1619,7 @@ async function renderLoadPage(){
       <select id="loadStatus" style="max-width:200px;margin-top:6px;"><option>รอส่ง</option><option>จัดส่งแล้ว</option></select>
       <div class="field full" style="margin-top:6px;"><label>หมายเหตุ</label><input type="text" id="loadNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('load', null, 'ใบส่งของ/เอกสารขนส่ง')}</div>
-      <button class="btn" style="margin-top:12px;" onclick="submitLoad()">💾 บันทึกข้อมูล</button>
+      <button class="btn" style="margin-top:12px;" onclick="submitLoad()">💾 บันทึกข้อมูล (ถ้าวันที่+ลูกค้า+Part ตรงกับรายการเดิม จะเขียนทับ)</button>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
@@ -1441,9 +1628,22 @@ async function renderLoadPage(){
     <div class="page-desc">บันทึกข้อมูลการจัดส่งสินค้าให้ลูกค้า</div>
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>ลูกค้า</th><th>Part</th><th>นน. (kg)</th><th>ทะเบียนรถ</th><th>คนขับ</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>ลูกค้า</th><th>Part</th><th>นน. (kg)</th><th>ทะเบียนรถ</th><th>คนขับ</th><th>สถานะ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'load',null); });
+}
+function editLoad(idx){
+  const r = window._loadRowsCache[idx];
+  document.getElementById('loadFormTitle').textContent = 'แก้ไขข้อมูลจัดส่ง (บันทึกแล้วจะเขียนทับรายการเดิม)';
+  document.getElementById('loadDate').value = r.load_date;
+  document.getElementById('loadCustomer').value = r.customer||'';
+  document.getElementById('loadPart').value = r.part||'';
+  document.getElementById('loadWeight').value = r.weight_kg||'';
+  document.getElementById('loadTruck').value = r.truck_no||'';
+  document.getElementById('loadDriver').value = r.driver||'';
+  document.getElementById('loadStatus').value = r.status;
+  document.getElementById('loadNote').value = r.note||'';
+  window.scrollTo(0,0);
 }
 async function submitLoad(){
   const date=document.getElementById('loadDate').value, customer=document.getElementById('loadCustomer').value.trim();
