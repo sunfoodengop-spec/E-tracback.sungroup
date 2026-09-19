@@ -418,6 +418,7 @@ async function apiCreateSpecialcut(date,subDept,lot,sublot,rmWeight,status,note,
 async function apiListInprocessMaster(){ return await rpc('rpc_list_inprocess_master', {p_session_token:session.token}); }
 async function apiUpsertInprocessMaster(code,name,dept,active){ return await rpc('rpc_upsert_inprocess_master', {p_session_token:session.token, p_code:code, p_name:name, p_dept:dept, p_active:active}); }
 async function apiGetRMReceivedByDept(dept,lot,sublot){ return await rpc('rpc_get_rm_received_by_dept', {p_session_token:session.token, p_dept:dept, p_lot:lot, p_sublot:sublot}); }
+async function apiListRMInprocessMapping(){ return await rpc('rpc_list_rm_inprocess_mapping', {p_session_token:session.token}); }
 async function apiSyncInprocessFromProduct(){ return await rpc('rpc_sync_inprocess_from_product', {p_session_token:session.token}); }
 // Freeze-Pack
 async function apiListFreezepack(lot){ return await rpc('rpc_list_freezepack', {p_session_token:session.token, p_lot:lot||null}); }
@@ -1081,12 +1082,12 @@ async function fetchChillerForCutup(){
 
     infoEl.innerHTML = `<div class="note-banner">จำนวนตัวรับจาก Chiller-OH (แขวนขึ้นราวไป Cut-up): <b>${cutupQty}</b> ตัว × น้ำหนักเฉลี่ยต่อตัวจาก LB <b>${avgWeightPerBird.toFixed(2)}</b> kg/ตัว = น้ำหนักประมาณการที่ Cut-up ได้รับ: <b>${estimatedWeightAtCutup.toFixed(1)}</b> kg</div>`;
 
-    // เติมรายการ RM ทุกตัวจาก RM Master อัตโนมัติ พร้อมน้ำหนักตั้งต้นจาก Yield % — แก้ไขได้ทุกช่อง
-    const rmItems = (window._rmMasterCache||[]).filter(r=>r.active);
+    // เติมรายการ RM เฉพาะตัวที่มี Yield % ระบุไว้เท่านั้น (ตัวที่ไม่มีให้ผู้ใช้กดเพิ่มเอง กันช่องว่างเปล่าที่ไม่มีความหมาย)
+    const rmItems = (window._rmMasterCache||[]).filter(r=>r.active && r.yield_pct != null);
     if(rmItems.length>0){
       cutupProductRows = rmItems.map(r=>({
         rm_code: r.rm_code,
-        total_weight_kg: r.yield_pct ? (estimatedWeightAtCutup * r.yield_pct/100).toFixed(1) : '',
+        total_weight_kg: (estimatedWeightAtCutup * r.yield_pct/100).toFixed(1),
         destinations: [{dept:'', weight_kg:''}]
       }));
       renderCutupProductRows();
@@ -1153,11 +1154,12 @@ let scProductRows = [];
 window._scRmReceived = null;
 async function renderSpecialcutPage(){
   setLoading();
-  let rows, inprocessItems;
-  try{ [rows, inprocessItems] = await Promise.all([apiListSpecialcut(scCurrentDept), apiListInprocessMaster()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3g แล้ว'); return; }
+  let rows, inprocessItems, rmInprocessMap;
+  try{ [rows, inprocessItems, rmInprocessMap] = await Promise.all([apiListSpecialcut(scCurrentDept), apiListInprocessMaster(), apiListRMInprocessMapping()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3k แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
   window._inprocessCache = inprocessItems.filter(i=>!i.sub_department || i.sub_department===scCurrentDept);
+  window._rmInprocessMapCache = rmInprocessMap;
   scProductRows = [{inprocess_code:'', qty_pcs:'', weight_kg:'', destinations:[{dept:'', weight_kg:''}]}];
   window._scRmReceived = null;
 
@@ -1186,10 +1188,10 @@ async function renderSpecialcutPage(){
         <div class="field"><label>สถานะ</label><select id="scStatus"><option>ร่างข้อมูล</option><option>พร้อมบันทึก</option></select></div>
       </div>
 
-      <div class="card-title" style="margin-top:16px;font-size:13px;">ระบุ Code In-Process (222) ที่จะผลิต และปลายทางที่ส่งต่อ</div>
+      <div class="card-title" style="margin-top:16px;font-size:13px;">Code In-Process ที่จะผลิต (กรอกอัตโนมัติทันทีที่ดึง RM ด้านบน — เฉพาะรายการที่มี Yield % ระบุไว้เท่านั้น น้ำหนักแก้ไขได้)</div>
       <div class="note-banner">Code inprocess ขึ้นต้นด้วย 222 เท่านั้น — Code FG (111) จะเกิดที่ Freeze-VacuumPack เมื่อผลิตเป็นสินค้าสำเร็จรูปแล้วเท่านั้น</div>
       <div id="scProductRows"></div>
-      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="scProductRows.push({inprocess_code:'',qty_pcs:'',weight_kg:'',destinations:[{dept:'',weight_kg:''}]});renderSCProductRows()">+ เพิ่มรายการ Code In-Process</button>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="scProductRows.push({inprocess_code:'',qty_pcs:'',weight_kg:'',destinations:[{dept:'',weight_kg:''}]});renderSCProductRows()">+ เพิ่ม Code In-Process อื่นเพิ่มเติม</button>
 
       <div class="field full" style="margin-top:14px;"><label>หมายเหตุ</label><input type="text" id="scNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('specialcut', null, 'รายงานผลผลิต/รูปภาพ')}</div>
@@ -1221,6 +1223,23 @@ async function fetchRMForSC(){
     const totalWeight = rows.reduce((s,r)=>s+(Number(r.total_weight_kg)||0),0);
     infoEl.innerHTML = `<div class="note-banner">พบ RM ${rows.length} รายการ รวม ${totalWeight.toFixed(1)} kg:<br>` +
       rows.map(r=>`&nbsp;&nbsp;• ${r.rm_name||r.rm_code} (${r.rm_code}): ${Number(r.total_weight_kg).toFixed(1)} kg`).join('<br>') + `</div>`;
+
+    // กรอก Code In-Process อัตโนมัติตามสัดส่วน Yield % ที่เคยกำหนดไว้ (RM -> In-Process)
+    // เฉพาะคู่ที่มี Yield % ระบุไว้เท่านั้น — ตัวที่ไม่มีให้ผู้ใช้กดเพิ่มเอง
+    const mapping = (window._rmInprocessMapCache||[]).filter(m=>m.yield_pct != null);
+    const newRows = [];
+    for(const rmRow of rows){
+      const matches = mapping.filter(m=>m.rm_code===rmRow.rm_code);
+      for(const m of matches){
+        newRows.push({
+          inprocess_code: m.inprocess_code,
+          qty_pcs: '',
+          weight_kg: (Number(rmRow.total_weight_kg||0) * m.yield_pct/100).toFixed(1),
+          destinations: [{dept:'', weight_kg:''}]
+        });
+      }
+    }
+    if(newRows.length>0){ scProductRows = newRows; renderSCProductRows(); }
   }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
 }
 function renderSCProductRows(){
