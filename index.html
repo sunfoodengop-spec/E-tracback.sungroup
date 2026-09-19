@@ -1071,7 +1071,7 @@ function renderCutupProductRows(){
   if(!container) return;
   const rmItems = window._rmMasterCache||[];
   const dl = `<datalist id="rmCodeList">${rmItems.map(r=>`<option value="${r.rm_code}">${r.rm_name} (${r.part_group})</option>`).join('')}</datalist>`;
-  const deptOptions = ['SPECIAL CUT','FREEZE-PACK','CS'];
+  const deptOptions = ['SC-SBB','SC-SBL','SC-Wings','Freeze-VacuumPack'];
   container.innerHTML = cutupProductRows.map((row,idx)=>{
     const rmInfo = rmItems.find(r=>r.rm_code===row.rm_code);
     const destRows = row.destinations.map((d,didx)=>`
