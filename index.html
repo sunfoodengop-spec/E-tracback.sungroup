@@ -1015,7 +1015,7 @@ async function renderCutupPage(){
   setLoading();
   let rows, rmItems;
   try{ [rows, rmItems] = await Promise.all([apiListCutup(), apiListRMMaster()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3f แล้ว'); return; }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3j แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
   window._rmMasterCache = rmItems;
   cutupProductRows = [{rm_code:'', total_weight_kg:'', destinations:[{dept:'', weight_kg:''}]}];
@@ -1039,9 +1039,9 @@ async function renderCutupPage(){
       <div id="cutupChillerInfo"></div>
       <div class="field" style="margin-top:10px;"><label>วันที่ตัดแต่ง</label><input type="date" id="cutupDate" value="${todayStr()}"></div>
 
-      <div class="card-title" style="margin-top:16px;font-size:13px;">รายการผลผลิต RM (แยกตามชิ้นส่วน — ระบุน้ำหนักรวม แล้วแยกปลายทางที่ส่งต่อได้หลายแผนก)</div>
+      <div class="card-title" style="margin-top:16px;font-size:13px;">รายการผลผลิต RM (กรอกอัตโนมัติครบทุกชิ้นส่วนตาม RM Master ทันทีที่ดึงข้อมูลด้านบน — น้ำหนักตั้งต้นคำนวณจาก Yield % แก้ไขได้ทุกช่อง)</div>
       <div id="cutupProductRows"></div>
-      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="cutupProductRows.push({rm_code:'',total_weight_kg:'',destinations:[{dept:'',weight_kg:''}]});renderCutupProductRows()">+ เพิ่มรายการ RM</button>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="cutupProductRows.push({rm_code:'',total_weight_kg:'',destinations:[{dept:'',weight_kg:''}]});renderCutupProductRows()">+ เพิ่มชิ้นส่วนอื่นเพิ่มเติม (นอกเหนือจาก RM Master)</button>
 
       <div class="field full" style="margin-top:14px;"><label>หมายเหตุ</label><input type="text" id="cutupNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('cutup', null, 'สรุปผลผลิต/รูปภาพ')}</div>
@@ -1064,11 +1064,33 @@ async function fetchChillerForCutup(){
   const infoEl=document.getElementById('cutupChillerInfo');
   if(!lot||!sublot){ infoEl.innerHTML=`<div class="err-banner">กรุณากรอก Chiller Lot และ Sublot</div>`; return; }
   try{
-    const rows = await apiListChiller(lot, sublot);
-    const match = rows.find(r=>r.evi_lot_code===lot && r.sublot===sublot);
+    const [chillerRows, lbRows] = await Promise.all([apiListChiller(lot, sublot), apiListLB(lot, sublot)]);
+    const match = chillerRows.find(r=>r.evi_lot_code===lot && r.sublot===sublot);
     if(!match){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ Chiller-OH Lot ${lot} / Sublot ${sublot}</div>`; window._cutupChillerData=null; return; }
     window._cutupChillerData = match;
-    infoEl.innerHTML = `<div class="note-banner">จำนวนตัวรับจาก Chiller-OH (แขวนขึ้นราวไป Cut-up): <b>${match.to_cutup_qty??'-'}</b> ตัว</div>`;
+
+    // น้ำหนักเฉลี่ยต่อตัวจาก LB (รวมได้หลายฟาร์มในเลขล็อตเดียวกัน) x จำนวนตัวจริงที่ Chiller ส่งมา Cut-up
+    // = น้ำหนักประมาณการที่ Cut-up ได้รับจริง (หักลบตัวที่หายไประหว่างทางแล้ว) ใช้เป็นฐานคูณ Yield %
+    const lbMatches = lbRows.filter(r=>r.lb_lot_code===lot && r.sublot===sublot);
+    const totalLbWeight = lbMatches.reduce((s,r)=>s+((r.avg_weight_kg||0)*(r.received_qty||0)), 0);
+    const totalLbQty = lbMatches.reduce((s,r)=>s+(r.received_qty||0), 0);
+    const avgWeightPerBird = totalLbQty>0 ? totalLbWeight/totalLbQty : 0;
+    const cutupQty = match.to_cutup_qty || 0;
+    const estimatedWeightAtCutup = avgWeightPerBird * cutupQty;
+    window._cutupEstimatedWeight = estimatedWeightAtCutup;
+
+    infoEl.innerHTML = `<div class="note-banner">จำนวนตัวรับจาก Chiller-OH (แขวนขึ้นราวไป Cut-up): <b>${cutupQty}</b> ตัว × น้ำหนักเฉลี่ยต่อตัวจาก LB <b>${avgWeightPerBird.toFixed(2)}</b> kg/ตัว = น้ำหนักประมาณการที่ Cut-up ได้รับ: <b>${estimatedWeightAtCutup.toFixed(1)}</b> kg</div>`;
+
+    // เติมรายการ RM ทุกตัวจาก RM Master อัตโนมัติ พร้อมน้ำหนักตั้งต้นจาก Yield % — แก้ไขได้ทุกช่อง
+    const rmItems = (window._rmMasterCache||[]).filter(r=>r.active);
+    if(rmItems.length>0){
+      cutupProductRows = rmItems.map(r=>({
+        rm_code: r.rm_code,
+        total_weight_kg: r.yield_pct ? (estimatedWeightAtCutup * r.yield_pct/100).toFixed(1) : '',
+        destinations: [{dept:'', weight_kg:''}]
+      }));
+      renderCutupProductRows();
+    }
   }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
 }
 function renderCutupProductRows(){
