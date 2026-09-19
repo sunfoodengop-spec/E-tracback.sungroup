@@ -418,6 +418,7 @@ async function apiCreateSpecialcut(date,subDept,lot,sublot,rmWeight,status,note,
 async function apiListInprocessMaster(){ return await rpc('rpc_list_inprocess_master', {p_session_token:session.token}); }
 async function apiUpsertInprocessMaster(code,name,dept,active){ return await rpc('rpc_upsert_inprocess_master', {p_session_token:session.token, p_code:code, p_name:name, p_dept:dept, p_active:active}); }
 async function apiGetRMReceivedByDept(dept,lot,sublot){ return await rpc('rpc_get_rm_received_by_dept', {p_session_token:session.token, p_dept:dept, p_lot:lot, p_sublot:sublot}); }
+async function apiSyncInprocessFromProduct(){ return await rpc('rpc_sync_inprocess_from_product', {p_session_token:session.token}); }
 // Freeze-Pack
 async function apiListFreezepack(lot){ return await rpc('rpc_list_freezepack', {p_session_token:session.token, p_lot:lot||null}); }
 async function apiCreateFreezepack(date,lot,sublot,freezer,weightIn,weightOut,status,note){
@@ -1523,31 +1524,46 @@ function importRMBulkExcel(inputEl){
 async function renderInprocessMasterPage(){
   setLoading();
   let items;
-  try{ items = await apiListInprocessMaster(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3g แล้ว'); return; }
+  try{ items = await apiListInprocessMaster(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3h แล้ว'); return; }
   items = items.slice().sort((a,b)=> (a.sub_department||'').localeCompare(b.sub_department||'') || a.inprocess_code.localeCompare(b.inprocess_code));
   const rows = items.map(r=>`<tr>
     <td class="lotcode">${r.inprocess_code}</td><td>${r.inprocess_name}</td><td><span class="badge badge-info">${r.sub_department||'-'}</span></td>
     <td>${r.active?'<span class="badge badge-pass">Active</span>':'<span class="badge badge-fail">Inactive</span>'}</td>
-  </tr>`).join('') || `<tr><td colspan="4"><div class="empty-state">ยังไม่มี Code In-Process</div></td></tr>`;
+  </tr>`).join('') || `<tr><td colspan="4"><div class="empty-state">ยังไม่มี Code In-Process — กดปุ่มซิงค์ด้านล่างเพื่อสร้างจาก Product Master</div></td></tr>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">เพิ่ม Code In-Process ใหม่ (ต้องขึ้นต้นด้วย 222)</div>
+      <div class="card-title">ซิงค์จาก Product Master (แนะนำ)</div>
+      <div class="page-desc" style="margin-bottom:12px;">Code In-Process (222) คือรายการเดียวกับ Product Master (111) ทุกตัว แค่เปลี่ยน 3 หลักแรก — ระบบสร้างให้อัตโนมัติทุกครั้งที่เพิ่ม/แก้ไข Product Master อยู่แล้ว กดปุ่มนี้เผื่อต้องการซิงค์ย้อนหลังหรือมีรายการตกหล่น</div>
+      <button class="btn" onclick="syncInprocessMaster()">🔄 ซิงค์จาก Product Master ตอนนี้</button>
+      <div id="ipSyncMsg" style="margin-top:8px;font-size:13px;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">เพิ่ม Code In-Process เองแบบพิเศษ (กรณีไม่มี FG คู่กัน — ต้องขึ้นต้นด้วย 222)</div>
       <div class="form-grid3">
         <div class="field"><label>Code (222-xxx)</label><input type="text" id="ipCode" placeholder="เช่น 222001"></div>
         <div class="field"><label>ชื่อ</label><input type="text" id="ipName" placeholder="เช่น BB หมัก"></div>
         <div class="field"><label>แผนกย่อย</label><select id="ipDept">${SC_SUBDEPTS.map(d=>`<option>${d}</option>`).join('')}</select></div>
       </div>
-      <button class="btn" style="margin-top:10px;" onclick="saveInprocessMaster()">💾 บันทึก</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="saveInprocessMaster()">💾 บันทึก</button>
       <div id="ipSaveMsg" style="margin-top:8px;font-size:13px;"></div>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    ${stationHeaderHtml('sh-master','🏷️','In-Process Master List','Code ระหว่างผลิต (222) ที่ใช้ในหน้า Special Cut — คนละชุดกับ Product Master (FG, 111) ซึ่งเกิดที่ Freeze-VacuumPack เท่านั้น')}
+    ${stationHeaderHtml('sh-master','🏷️','In-Process Master List','Code ระหว่างผลิต (222) = กระจกเงาของ Product Master (111) — ซิงค์อัตโนมัติ')}
     ${formHtml}
     <div class="card"><div class="card-title">Code In-Process ทั้งหมด (${items.length})</div>
       <table><thead><tr><th>Code</th><th>ชื่อ</th><th>แผนกย่อย</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
+}
+async function syncInprocessMaster(){
+  const msg = document.getElementById('ipSyncMsg');
+  msg.textContent = 'กำลังซิงค์...'; msg.style.color = 'var(--ink-soft)';
+  try{
+    const count = await apiSyncInprocessFromProduct();
+    msg.textContent = `ซิงค์สำเร็จ ${count} รายการ`; msg.style.color = 'var(--green-700)';
+    renderInprocessMasterPage();
+  }catch(e){ msg.textContent = 'ซิงค์ไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด'); msg.style.color = 'var(--red-600)'; }
 }
 async function saveInprocessMaster(){
   const code=document.getElementById('ipCode').value.trim(), name=document.getElementById('ipName').value.trim();
