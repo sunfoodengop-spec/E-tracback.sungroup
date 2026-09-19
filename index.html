@@ -422,6 +422,7 @@ async function apiUpsertInprocessMaster(code,name,dept,active){ return await rpc
 async function apiGetRMReceivedByDept(dept,lot,sublot){ return await rpc('rpc_get_rm_received_by_dept', {p_session_token:session.token, p_dept:dept, p_lot:lot, p_sublot:sublot}); }
 async function apiListRMInprocessMapping(){ return await rpc('rpc_list_rm_inprocess_mapping', {p_session_token:session.token}); }
 async function apiListInprocessInprocessMapping(){ return await rpc('rpc_list_inprocess_inprocess_mapping', {p_session_token:session.token}); }
+async function apiGetFreezepackReceived(lot,sublot){ return await rpc('rpc_get_freezepack_received', {p_session_token:session.token, p_lot:lot, p_sublot:sublot}); }
 async function apiSyncInprocessFromProduct(){ return await rpc('rpc_sync_inprocess_from_product', {p_session_token:session.token}); }
 // Freeze-Pack
 async function apiListFreezepack(lot){ return await rpc('rpc_list_freezepack', {p_session_token:session.token, p_lot:lot||null}); }
@@ -1466,7 +1467,7 @@ async function submitSpecialcut(){
 async function renderFreezepackPage(){
   setLoading();
   let rows;
-  try{ rows = await apiListFreezepack(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  try{ rows = await apiListFreezepack(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3o แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
   window._fpRowsCache = rows;
   const tableRows = rows.map((r,idx)=>`<tr><td>${r.produced_date}</td><td class="lotcode">${r.lot}</td><td>${r.sublot}</td><td>${r.freezer_no||'-'}</td>
@@ -1477,15 +1478,19 @@ async function renderFreezepackPage(){
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title" id="fpFormTitle">บันทึกข้อมูล Freeze-Pack</div>
-      <div class="form-grid4">
+      <div class="card-title" id="fpFormTitle">รับสินค้าเข้า Freeze-VacuumPack (ดึงจาก Lot/Sublot — รวมทุกแผนกที่ส่งมาให้)</div>
+      <div class="form-grid3">
+        <div class="field"><label>Lot</label><input type="text" id="fpLot" placeholder="เช่น 2569227"></div>
+        <div class="field"><label>Sublot</label><input type="text" id="fpSublot" placeholder="เช่น 01"></div>
+        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchReceivedForFreezepack()">🔄 ดึงข้อมูลที่ส่งมาให้ Freeze-VacuumPack</button></div>
+      </div>
+      <div id="fpReceivedInfo"></div>
+      <div class="form-grid" style="margin-top:10px;">
         <div class="field"><label>วันที่</label><input type="date" id="fpDate" value="${todayStr()}"></div>
-        <div class="field"><label>Lot</label><input type="text" id="fpLot"></div>
-        <div class="field"><label>Sublot</label><input type="text" id="fpSublot"></div>
         <div class="field"><label>Freezer No.</label><input type="text" id="fpFreezer"></div>
       </div>
       <div class="form-grid" style="margin-top:6px;">
-        <div class="field"><label>น้ำหนักเข้า (kg)</label><input type="number" id="fpWeightIn"></div>
+        <div class="field"><label>น้ำหนักเข้า (kg) — ตั้งต้นจากยอดรวมที่ดึงมา แก้ไขได้</label><input type="number" id="fpWeightIn"></div>
         <div class="field"><label>ปริมาณบรรจุ (kg)</label><input type="number" id="fpWeightOut"></div>
       </div>
       <select id="fpStatus" style="max-width:200px;margin-top:6px;"><option>แช่แข็ง</option><option>บรรจุแล้ว</option></select>
@@ -1494,21 +1499,35 @@ async function renderFreezepackPage(){
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    ${stationHeaderHtml('sh-freezepack','📦','FREEZE-PACK (แช่แข็ง/บรรจุ)','บันทึกข้อมูลการแช่แข็งและบรรจุสินค้า')}
+    ${stationHeaderHtml('sh-freezepack','📦','FREEZE-PACK (แช่แข็ง/บรรจุ)','ดึงยอดที่ Cut Up และ Special Cut ส่งมาให้ Freeze-VacuumPack อัตโนมัติ')}
     ${breadcrumbHtml('freezepack')}
-    <div class="page-desc">บันทึกข้อมูลการแช่แข็งและบรรจุสินค้า</div>
+    <div class="page-desc">รับสินค้าเข้า Freeze-VacuumPack — ดึงยอดที่แผนกต่างๆ (Cut Up + Special Cut ทั้ง 3 แผนกย่อย) ส่งมาให้จริงตาม Lot/Sublot</div>
     ${formHtml}
     <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
       <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Freezer</th><th>นน.เข้า</th><th>ปริมาณบรรจุ</th><th>สถานะ</th><th></th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'freezepack',null); });
 }
-function editFreezepack(idx){
+async function fetchReceivedForFreezepack(){
+  const lot=document.getElementById('fpLot').value.trim(), sublot=document.getElementById('fpSublot').value.trim();
+  const infoEl=document.getElementById('fpReceivedInfo');
+  if(!lot||!sublot){ infoEl.innerHTML=`<div class="err-banner">กรุณากรอก Lot และ Sublot</div>`; return; }
+  try{
+    const rows = await apiGetFreezepackReceived(lot, sublot);
+    if(rows.length===0){ infoEl.innerHTML=`<div class="err-banner">ไม่พบข้อมูลที่ส่งมาให้ Freeze-VacuumPack สำหรับ Lot ${lot} / Sublot ${sublot}</div>`; return; }
+    const total = rows.reduce((s,r)=>s+(Number(r.total_weight_kg)||0),0);
+    infoEl.innerHTML = `<div class="note-banner">พบ ${rows.length} รายการจากทุกแผนก รวม ${total.toFixed(1)} kg:<br>` +
+      rows.map(r=>`&nbsp;&nbsp;• [${r.source_station}] ${r.product_name||r.product_code} (${r.product_code}): ${Number(r.total_weight_kg).toFixed(1)} kg`).join('<br>') + `</div>`;
+    document.getElementById('fpWeightIn').value = total.toFixed(1);
+  }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
+}
+async function editFreezepack(idx){
   const r = window._fpRowsCache[idx];
   document.getElementById('fpFormTitle').textContent = 'แก้ไขข้อมูล Freeze-Pack (บันทึกแล้วจะเขียนทับรายการเดิม)';
-  document.getElementById('fpDate').value = r.produced_date;
   document.getElementById('fpLot').value = r.lot;
   document.getElementById('fpSublot').value = r.sublot;
+  await fetchReceivedForFreezepack();
+  document.getElementById('fpDate').value = r.produced_date;
   document.getElementById('fpFreezer').value = r.freezer_no||'';
   document.getElementById('fpWeightIn').value = r.weight_in_kg||'';
   document.getElementById('fpWeightOut').value = r.weight_out_kg||'';
