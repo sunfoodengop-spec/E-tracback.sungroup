@@ -10,17 +10,17 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
-    --ink:#1B2421; --ink-soft:#4B5650; --paper:#F6F5F0; --card:#FFFFFF; --line:#DEDCD2;
-    --teal-900:#04342C; --teal-700:#0F6E56; --teal-500:#1D9E75; --teal-100:#E1F5EE;
+    --ink:#16233A; --ink-soft:#4F6079; --paper:#F0F5FA; --card:#FFFFFF; --line:#DCE6F0;
+    --teal-900:#0B3B82; --teal-700:#1D4ED8; --teal-500:#3B82F6; --teal-100:#DBEAFE;
     --amber-700:#854F0B; --amber-500:#BA7517; --amber-100:#FAEEDA;
-    --gray-500:#888780; --gray-100:#F1EFE8;
+    --gray-500:#8B98A8; --gray-100:#EEF3F8;
     --red-600:#A32D2D; --red-100:#FCEBEB; --green-700:#27500A; --green-100:#EAF3DE;
     --blue-700:#1D4ED8; --blue-100:#DBEAFE;
     --radius:10px;
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:'Sarabun',sans-serif;background:var(--paper);color:var(--ink);}
-  #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--teal-900),#08221D);}
+  #loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--teal-900),#061A42);}
   .login-card{background:var(--card);border-radius:16px;padding:44px 40px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
   .login-eyebrow{font-size:12px;letter-spacing:.08em;color:var(--teal-500);font-weight:600;text-transform:uppercase;}
   .login-title{font-size:24px;font-weight:700;margin:6px 0 4px;}
@@ -44,21 +44,21 @@
   .btn-danger{background:var(--red-600);}
   #appScreen{display:none;min-height:100vh;}
   .app-shell{display:flex;min-height:100vh;}
-  .sidebar{width:250px;flex-shrink:0;background:var(--teal-900);color:#EDEEE8;padding:22px 14px;display:flex;flex-direction:column;overflow-y:auto;}
-  .brand{padding:0 10px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:6px;}
-  .brand-name{font-weight:700;font-size:15px;}
-  .brand-sub{font-size:11px;color:#8FBBB0;margin-top:2px;}
-  .nav-group-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#7FA79C;padding:14px 10px 6px;}
-  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:#D6E4DF;margin-bottom:2px;}
-  .nav-item:hover{background:rgba(255,255,255,.08);}
-  .nav-item.active{background:#0F6E56;color:#fff;font-weight:600;}
+  .sidebar{width:250px;flex-shrink:0;background:#fff;color:var(--ink);padding:22px 14px;display:flex;flex-direction:column;overflow-y:auto;border-right:1px solid var(--line);}
+  .brand{padding:0 10px 18px;border-bottom:1px solid var(--line);margin-bottom:6px;}
+  .brand-name{font-weight:700;font-size:15px;color:var(--ink);}
+  .brand-sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .nav-group-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);padding:14px 10px 6px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--ink-soft);margin-bottom:2px;}
+  .nav-item:hover{background:var(--teal-100);color:var(--ink);}
+  .nav-item.active{background:var(--teal-500);color:#fff;font-weight:600;}
   .nav-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--teal-500);}
   .nav-dot.admin{background:#E05A5A;}
   .nav-dot.util{background:#7F77DD;}
-  .sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);}
-  .role-chip{font-size:12px;color:#B9CFC8;margin-bottom:2px;}
-  .role-chip b{color:#fff;}
-  .user-chip{font-size:11px;color:#8FBBB0;margin-bottom:8px;}
+  .sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);}
+  .role-chip{font-size:12px;color:var(--ink-soft);margin-bottom:2px;}
+  .role-chip b{color:var(--ink);}
+  .user-chip{font-size:11px;color:var(--ink-soft);margin-bottom:8px;}
   .main{flex:1;padding:26px 36px;max-width:1220px;}
   .page-eyebrow{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--teal-700);}
   .page-title{font-size:23px;font-weight:700;margin:4px 0 4px;}
@@ -160,7 +160,7 @@
   </div>
 </div>
 
-<div id="pinChangeScreen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--teal-900),#08221D);">
+<div id="pinChangeScreen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--teal-900),#061A42);">
   <div class="login-card">
     <div class="login-eyebrow">ครั้งแรกที่เข้าใช้งาน</div>
     <div class="login-title">ตั้ง PIN ใหม่ของคุณ</div>
@@ -196,8 +196,8 @@
       <div class="sidebar-footer">
         <div class="role-chip">บทบาท: <b id="roleDisplay"></b></div>
         <div class="user-chip" id="userNameDisplay"></div>
-        <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;margin-bottom:6px;" onclick="openChangePinDialog()">🔑 เปลี่ยน PIN</button>
-        <button class="btn btn-ghost btn-sm" style="color:#EDEEE8;border-color:rgba(255,255,255,.25);width:100%;" onclick="doLogout()">🚪 ออกจากระบบ</button>
+        <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:6px;" onclick="openChangePinDialog()">🔑 เปลี่ยน PIN</button>
+        <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="doLogout()">🚪 ออกจากระบบ</button>
       </div>
     </div>
     <div class="main" id="mainContent"></div>
