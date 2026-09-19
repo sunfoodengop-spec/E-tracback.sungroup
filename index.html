@@ -419,6 +419,7 @@ async function apiListInprocessMaster(){ return await rpc('rpc_list_inprocess_ma
 async function apiUpsertInprocessMaster(code,name,dept,active){ return await rpc('rpc_upsert_inprocess_master', {p_session_token:session.token, p_code:code, p_name:name, p_dept:dept, p_active:active}); }
 async function apiGetRMReceivedByDept(dept,lot,sublot){ return await rpc('rpc_get_rm_received_by_dept', {p_session_token:session.token, p_dept:dept, p_lot:lot, p_sublot:sublot}); }
 async function apiListRMInprocessMapping(){ return await rpc('rpc_list_rm_inprocess_mapping', {p_session_token:session.token}); }
+async function apiListInprocessInprocessMapping(){ return await rpc('rpc_list_inprocess_inprocess_mapping', {p_session_token:session.token}); }
 async function apiSyncInprocessFromProduct(){ return await rpc('rpc_sync_inprocess_from_product', {p_session_token:session.token}); }
 // Freeze-Pack
 async function apiListFreezepack(lot){ return await rpc('rpc_list_freezepack', {p_session_token:session.token, p_lot:lot||null}); }
@@ -1154,12 +1155,13 @@ let scProductRows = [];
 window._scRmReceived = null;
 async function renderSpecialcutPage(){
   setLoading();
-  let rows, inprocessItems, rmInprocessMap;
-  try{ [rows, inprocessItems, rmInprocessMap] = await Promise.all([apiListSpecialcut(scCurrentDept), apiListInprocessMaster(), apiListRMInprocessMapping()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3k แล้ว'); return; }
+  let rows, inprocessItems, rmInprocessMap, ipInprocessMap;
+  try{ [rows, inprocessItems, rmInprocessMap, ipInprocessMap] = await Promise.all([apiListSpecialcut(scCurrentDept), apiListInprocessMaster(), apiListRMInprocessMapping(), apiListInprocessInprocessMapping()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3l แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
   window._inprocessCache = inprocessItems.filter(i=>!i.sub_department || i.sub_department===scCurrentDept);
   window._rmInprocessMapCache = rmInprocessMap;
+  window._ipInprocessMapCache = ipInprocessMap;
   scProductRows = [{inprocess_code:'', qty_pcs:'', weight_kg:'', destinations:[{dept:'', weight_kg:''}]}];
   window._scRmReceived = null;
 
@@ -1212,6 +1214,17 @@ async function renderSpecialcutPage(){
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'specialcut',null); });
 }
 function switchSCDept(dept){ scCurrentDept = dept; renderSpecialcutPage(); }
+function expandInProcessDeep(ipCode, weight){
+  // ไล่ขยายลงไปเรื่อยๆ ตราบใดที่ยังมีลูกใน In-Process ต่อไปอีก (เช่น BL -> BLK, BL -> BL Block)
+  // หยุดเมื่อไม่มีลูกต่อแล้ว (ถึงชั้นที่ลึกที่สุดเท่าที่ข้อมูลมี) แล้วคืนแถวนั้นเป็นผลลัพธ์
+  const children = (window._ipInprocessMapCache||[]).filter(m=>m.parent_code===ipCode && m.yield_pct!=null);
+  if(children.length===0) return [{inprocess_code: ipCode, weight_kg: weight}];
+  let results = [];
+  for(const c of children){
+    results = results.concat(expandInProcessDeep(c.child_code, weight * c.yield_pct/100));
+  }
+  return results;
+}
 async function fetchRMForSC(){
   const lot=document.getElementById('scLot').value.trim(), sublot=document.getElementById('scSublot').value.trim();
   const infoEl=document.getElementById('scRmInfo');
@@ -1224,19 +1237,17 @@ async function fetchRMForSC(){
     infoEl.innerHTML = `<div class="note-banner">พบ RM ${rows.length} รายการ รวม ${totalWeight.toFixed(1)} kg:<br>` +
       rows.map(r=>`&nbsp;&nbsp;• ${r.rm_name||r.rm_code} (${r.rm_code}): ${Number(r.total_weight_kg).toFixed(1)} kg`).join('<br>') + `</div>`;
 
-    // กรอก Code In-Process อัตโนมัติตามสัดส่วน Yield % ที่เคยกำหนดไว้ (RM -> In-Process)
-    // เฉพาะคู่ที่มี Yield % ระบุไว้เท่านั้น — ตัวที่ไม่มีให้ผู้ใช้กดเพิ่มเอง
+    // กรอก Code In-Process อัตโนมัติตามสัดส่วน Yield % — ขยายลึกไปจนถึงชั้นที่ลึกที่สุดที่มีข้อมูล
+    // (RM -> In-Process ชั้นแรก -> ถ้ามีลูกต่ออีก ขยายต่อไปเรื่อยๆ ไม่หยุดแค่ชั้นแรก)
     const mapping = (window._rmInprocessMapCache||[]).filter(m=>m.yield_pct != null);
-    const newRows = [];
+    let newRows = [];
     for(const rmRow of rows){
       const matches = mapping.filter(m=>m.rm_code===rmRow.rm_code);
       for(const m of matches){
-        newRows.push({
-          inprocess_code: m.inprocess_code,
-          qty_pcs: '',
-          weight_kg: (Number(rmRow.total_weight_kg||0) * m.yield_pct/100).toFixed(1),
-          destinations: [{dept:'', weight_kg:''}]
-        });
+        const expanded = expandInProcessDeep(m.inprocess_code, Number(rmRow.total_weight_kg||0) * m.yield_pct/100);
+        for(const e of expanded){
+          newRows.push({ inprocess_code: e.inprocess_code, qty_pcs: '', weight_kg: e.weight_kg.toFixed(1), destinations: [{dept:'', weight_kg:''}] });
+        }
       }
     }
     if(newRows.length>0){ scProductRows = newRows; renderSCProductRows(); }
