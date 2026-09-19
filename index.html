@@ -410,11 +410,14 @@ async function apiCreateCutup(chillerLot,sublot,cutDate,note,products){
   return await rpc('rpc_create_cutup', {p_session_token:session.token, p_chiller_lot:chillerLot, p_sublot:sublot, p_cut_date:cutDate, p_note:note, p_products:products});
 }
 // Special Cut
-async function apiListSpecialcut(lot,sublot){ return await rpc('rpc_list_specialcut', {p_session_token:session.token, p_lot:lot||null, p_sublot:sublot||null}); }
+async function apiListSpecialcut(dept,lot,sublot){ return await rpc('rpc_list_specialcut', {p_session_token:session.token, p_dept:dept||null, p_lot:lot||null, p_sublot:sublot||null}); }
 async function apiListSpecialcutProducts(scId){ return await rpc('rpc_list_specialcut_products', {p_session_token:session.token, p_specialcut_record_id:scId}); }
-async function apiCreateSpecialcut(date,lot,sublot,part,rmWeight,status,note,products){
-  return await rpc('rpc_create_specialcut', {p_session_token:session.token, p_date:date, p_lot:lot, p_sublot:sublot, p_part:part, p_rm_weight:rmWeight, p_status:status, p_note:note, p_products:products});
+async function apiCreateSpecialcut(date,subDept,lot,sublot,rmWeight,status,note,products){
+  return await rpc('rpc_create_specialcut', {p_session_token:session.token, p_date:date, p_sub_department:subDept, p_lot:lot, p_sublot:sublot, p_rm_weight:rmWeight, p_status:status, p_note:note, p_products:products});
 }
+async function apiListInprocessMaster(){ return await rpc('rpc_list_inprocess_master', {p_session_token:session.token}); }
+async function apiUpsertInprocessMaster(code,name,dept,active){ return await rpc('rpc_upsert_inprocess_master', {p_session_token:session.token, p_code:code, p_name:name, p_dept:dept, p_active:active}); }
+async function apiGetRMReceivedByDept(dept,lot,sublot){ return await rpc('rpc_get_rm_received_by_dept', {p_session_token:session.token, p_dept:dept, p_lot:lot, p_sublot:sublot}); }
 // Freeze-Pack
 async function apiListFreezepack(lot){ return await rpc('rpc_list_freezepack', {p_session_token:session.token, p_lot:lot||null}); }
 async function apiCreateFreezepack(date,lot,sublot,freezer,weightIn,weightOut,status,note){
@@ -453,7 +456,7 @@ function renderSidebar(){
     {key:'specialcut',name:'🔪 SPECIAL CUT (ตัดแต่งพิเศษ)'},{key:'freezepack',name:'📦 FREEZE-PACK (แช่แข็ง/บรรจุ)'},
     {key:'cs',name:'🏢 CS (ห้องเย็น)'},{key:'load',name:'🚚 LOAD (จัดส่ง)'},
   ]);
-  h+=navGroup('Master Data', [{key:'farmmaster',name:'🏡 Farm Master'},{key:'rmmaster',name:'🧩 RM Master List'},{key:'productmaster',name:'📦 Product Master'}]);
+  h+=navGroup('Master Data', [{key:'farmmaster',name:'🏡 Farm Master'},{key:'rmmaster',name:'🧩 RM Master List'},{key:'inprocessmaster',name:'🏷️ In-Process Master (222)'},{key:'productmaster',name:'📦 Product Master (111)'}]);
   if(isAdmin()){
     h+=navGroup('Admin', [{key:'employees',name:'👥 จัดการผู้ใช้งาน',dot:'admin'},{key:'auditlog',name:'📜 Audit Log',dot:'admin'}]);
   }
@@ -481,6 +484,7 @@ function navigateTo(key){
   else if(key==='load') renderLoadPage();
   else if(key==='farmmaster') renderFarmMasterPage();
   else if(key==='rmmaster') renderRMMasterPage();
+  else if(key==='inprocessmaster') renderInprocessMasterPage();
   else if(key==='productmaster') renderProductMasterPage();
   else if(key==='employees') renderEmployeesPage();
   else if(key==='auditlog') renderAuditLogPage();
@@ -1119,119 +1123,131 @@ async function submitCutup(){
 }
 
 /* ================= SPECIAL CUT ================= */
+const SC_SUBDEPTS = ['SC-SBB','SC-SBL','SC-Wings'];
+const SC_DEST_OPTIONS = ['SMP','YTR','IVQF','Freeze-VacuumPack'];
+let scCurrentDept = 'SC-SBB';
 let scProductRows = [];
+window._scRmReceived = null;
 async function renderSpecialcutPage(){
   setLoading();
-  let rows, products;
-  try{ [rows, products] = await Promise.all([apiListSpecialcut(), apiListProductMaster()]); }
-  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ'); return; }
+  let rows, inprocessItems;
+  try{ [rows, inprocessItems] = await Promise.all([apiListSpecialcut(scCurrentDept), apiListInprocessMaster()]); }
+  catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3g แล้ว'); return; }
   rows = rows.slice().sort((a,b)=> b.created_at.localeCompare(a.created_at));
-  window._scProductCache = products;
-  scProductRows = [{product_code:'',product_name:'',qty_pcs:'',weight_kg:'',note:''}];
+  window._inprocessCache = inprocessItems.filter(i=>!i.sub_department || i.sub_department===scCurrentDept);
+  scProductRows = [{inprocess_code:'', qty_pcs:'', weight_kg:'', destinations:[{dept:'', weight_kg:''}]}];
+  window._scRmReceived = null;
 
   const rowParts = await Promise.all(rows.map(async r=>{
     let prods=[]; try{ prods = await apiListSpecialcutProducts(r.id); }catch(e){}
     const totalWeight = prods.reduce((s,p)=>s+(Number(p.weight_kg)||0),0);
-    return `<tr><td>${r.produced_date}</td><td class="lotcode">${r.lot}</td><td>${r.sublot}</td><td>${r.part||'-'}</td>
+    return `<tr><td>${r.produced_date}</td><td class="lotcode">${r.lot}</td><td>${r.sublot}</td>
       <td>${prods.length} รายการ</td><td>${totalWeight.toFixed(1)}</td>
       <td><span class="badge ${r.status==='พร้อมบันทึก'?'badge-pass':'badge-warn'}">${r.status}</span></td></tr>`;
   }));
-  const tableRows = rowParts.join('') || `<tr><td colspan="7"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+  const tableRows = rowParts.join('') || `<tr><td colspan="6"><div class="empty-state">ยังไม่มีข้อมูล</div></td></tr>`;
+
+  const tabsHtml = `<div class="tabs">${SC_SUBDEPTS.map(d=>`<div class="tab-btn ${d===scCurrentDept?'active':''}" onclick="switchSCDept('${d}')">${d}</div>`).join('')}</div>`;
 
   const formHtml = canWrite() ? `
     <div class="card">
-      <div class="card-title">บันทึกข้อมูล Special Cut</div>
-      <div class="form-grid4">
-        <div class="field"><label>วันที่ผลิต</label><input type="date" id="scDate" value="${todayStr()}"></div>
-        <div class="field"><label>Lot</label><input type="text" id="scLot" placeholder="เช่น 2569227"></div>
+      <div class="card-title">รับ RM จาก Cut Up (แผนก ${scCurrentDept})</div>
+      <div class="form-grid3">
+        <div class="field"><label>Cut Up Lot</label><input type="text" id="scLot" placeholder="เช่น 2569227"></div>
         <div class="field"><label>Sublot</label><input type="text" id="scSublot" placeholder="เช่น 01"></div>
-        <div class="field"><label>เลือก Part</label><select id="scPart"><option>BB</option><option>BL</option><option>Fillet</option><option>Wing</option></select></div>
+        <div class="field"><button class="btn btn-ghost" style="margin-top:22px;" onclick="fetchRMForSC()">🔄 ดึง RM ที่ส่งมาให้แผนกนี้</button></div>
       </div>
-      <div class="form-grid" style="margin-top:6px;">
-        <div class="field"><label>RM Weight (kg)</label><input type="number" id="scRmWeight"></div>
+      <div id="scRmInfo"></div>
+      <div class="form-grid" style="margin-top:10px;">
+        <div class="field"><label>วันที่ผลิต</label><input type="date" id="scDate" value="${todayStr()}"></div>
         <div class="field"><label>สถานะ</label><select id="scStatus"><option>ร่างข้อมูล</option><option>พร้อมบันทึก</option></select></div>
       </div>
-      <div class="warn-banner" style="margin-top:10px;">รองรับ Bulk — วาง CSV (Product Code,จำนวนชิ้น,น้ำหนัก) หรืออัปโหลดไฟล์ Excel</div>
-      <textarea id="scBulkCsv" placeholder="เช่น
-110001,50,500
-110004,30,300"></textarea>
-      <div style="margin-top:8px;display:flex;gap:8px;">
-        <button class="btn btn-sm" onclick="parseSCBulkCsv()">แปลง CSV เป็นแถว</button>
-        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">อัปโหลด Excel (.xlsx)<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="parseSCBulkExcel(this)"></label>
-        <button class="btn btn-ghost btn-sm" onclick="downloadSCTemplate()">ดาวน์โหลด Template</button>
-      </div>
-      <div class="card-title" style="margin-top:14px;font-size:13px;">รายการสินค้า</div>
-      <div class="line-item-row grid-head"><div>Product Code</div><div>จำนวน (ชิ้น)</div><div>น้ำหนัก (kg)</div><div>หมายเหตุ</div><div></div></div>
+
+      <div class="card-title" style="margin-top:16px;font-size:13px;">ระบุ Code In-Process (222) ที่จะผลิต และปลายทางที่ส่งต่อ</div>
+      <div class="note-banner">Code inprocess ขึ้นต้นด้วย 222 เท่านั้น — Code FG (111) จะเกิดที่ Freeze-VacuumPack เมื่อผลิตเป็นสินค้าสำเร็จรูปแล้วเท่านั้น</div>
       <div id="scProductRows"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="scProductRows.push({inprocess_code:'',qty_pcs:'',weight_kg:'',destinations:[{dept:'',weight_kg:''}]});renderSCProductRows()">+ เพิ่มรายการ Code In-Process</button>
+
+      <div class="field full" style="margin-top:14px;"><label>หมายเหตุ</label><input type="text" id="scNote"></div>
       <div style="margin-top:12px;">${docUploadWidgetHtml('specialcut', null, 'รายงานผลผลิต/รูปภาพ')}</div>
       <button class="btn" style="margin-top:12px;" onclick="submitSpecialcut()">💾 บันทึกข้อมูล</button>
       <div id="scSubmitResult" style="margin-top:10px;"></div>
     </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
 
   document.getElementById('mainContent').innerHTML = `
-    ${stationHeaderHtml('sh-specialcut','🔪','SPECIAL CUT (ตัดแต่งพิเศษ)','รองรับ Bulk Import พร้อม Validate Product Code')}
+    ${stationHeaderHtml('sh-specialcut','🔪','SPECIAL CUT (ตัดแต่งพิเศษ)','รับ RM จาก Cut Up ตามแผนกย่อย แล้วระบุ Code In-Process และปลายทาง')}
     ${breadcrumbHtml('specialcut')}
-    <div class="page-desc">บันทึกผลผลิตตัดแต่งพิเศษต่อ Product Code — ตรวจสอบกับ Product Master ก่อนบันทึกทุกครั้ง</div>
+    <div class="page-desc">แบ่งเป็น 3 แผนกย่อยตามที่ Cut Up ส่ง RM มาให้จริง — ลูกค้าของแต่ละแผนก: SMP / YTR / IVQF / Freeze-VacuumPack</div>
+    ${tabsHtml}
     ${formHtml}
-    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length})</div>
-      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>Part</th><th>รายการสินค้า</th><th>รวม (kg)</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
+    <div class="card"><div class="card-title">ประวัติการบันทึก (${rows.length}) — แผนก ${scCurrentDept}</div>
+      <table><thead><tr><th>วันที่</th><th>Lot</th><th>Sublot</th><th>รายการ Code</th><th>รวม (kg)</th><th>สถานะ</th></tr></thead><tbody>${tableRows}</tbody></table>
     </div>`;
   renderSCProductRows();
   document.querySelectorAll('.card').forEach(c=>{ if(c.querySelector('.doc-list-area')) initDocWidget(c,'specialcut',null); });
 }
+function switchSCDept(dept){ scCurrentDept = dept; renderSpecialcutPage(); }
+async function fetchRMForSC(){
+  const lot=document.getElementById('scLot').value.trim(), sublot=document.getElementById('scSublot').value.trim();
+  const infoEl=document.getElementById('scRmInfo');
+  if(!lot||!sublot){ infoEl.innerHTML=`<div class="err-banner">กรุณากรอก Lot และ Sublot</div>`; return; }
+  try{
+    const rows = await apiGetRMReceivedByDept(scCurrentDept, lot, sublot);
+    if(rows.length===0){ infoEl.innerHTML=`<div class="err-banner">ไม่พบ RM ที่ Cut Up ส่งมาให้แผนก ${scCurrentDept} สำหรับ Lot ${lot} / Sublot ${sublot}</div>`; window._scRmReceived=null; return; }
+    window._scRmReceived = {lot, sublot, items: rows};
+    const totalWeight = rows.reduce((s,r)=>s+(Number(r.total_weight_kg)||0),0);
+    infoEl.innerHTML = `<div class="note-banner">พบ RM ${rows.length} รายการ รวม ${totalWeight.toFixed(1)} kg:<br>` +
+      rows.map(r=>`&nbsp;&nbsp;• ${r.rm_name||r.rm_code} (${r.rm_code}): ${Number(r.total_weight_kg).toFixed(1)} kg`).join('<br>') + `</div>`;
+  }catch(e){ infoEl.innerHTML=`<div class="err-banner">ค้นหาไม่สำเร็จ</div>`; }
+}
 function renderSCProductRows(){
   const container = document.getElementById('scProductRows');
   if(!container) return;
-  const products = window._scProductCache||[];
-  const dl = `<datalist id="scProductCodeList">${products.map(p=>`<option value="${p.product_code}">${p.product_name||''}</option>`).join('')}</datalist>`;
+  const inprocessItems = window._inprocessCache||[];
+  const dl = `<datalist id="inprocessCodeList">${inprocessItems.map(p=>`<option value="${p.inprocess_code}">${p.inprocess_name||''}</option>`).join('')}</datalist>`;
   container.innerHTML = scProductRows.map((row,idx)=>{
-    const validCode = !row.product_code || products.find(p=>p.product_code===row.product_code);
-    return `<div class="line-item-row">
-      <input type="text" value="${row.product_code}" list="scProductCodeList" placeholder="Product Code" style="${validCode?'':'border-color:var(--red-600);background:var(--red-100);'}" onchange="scProductRows[${idx}].product_code=this.value; renderSCProductRows();">
-      <input type="number" value="${row.qty_pcs}" onchange="scProductRows[${idx}].qty_pcs=this.value">
-      <input type="number" value="${row.weight_kg}" onchange="scProductRows[${idx}].weight_kg=this.value">
-      <input type="text" value="${row.note}" onchange="scProductRows[${idx}].note=this.value">
-      <button class="btn btn-ghost btn-sm" onclick="scProductRows.splice(${idx},1);renderSCProductRows()">✕</button>
+    const validCode = !row.inprocess_code || inprocessItems.find(p=>p.inprocess_code===row.inprocess_code);
+    const destRows = row.destinations.map((d,didx)=>`
+      <div class="line-item-row" style="grid-template-columns:1.2fr 1fr 34px;margin-bottom:4px;">
+        <select onchange="scProductRows[${idx}].destinations[${didx}].dept=this.value">
+          <option value="">-- เลือกปลายทาง --</option>
+          ${SC_DEST_OPTIONS.map(o=>`<option value="${o}" ${d.dept===o?'selected':''}>${o}</option>`).join('')}
+        </select>
+        <input type="number" value="${d.weight_kg}" placeholder="น้ำหนัก (kg)" onchange="scProductRows[${idx}].destinations[${didx}].weight_kg=this.value">
+        <button class="icon-btn" onclick="scProductRows[${idx}].destinations.splice(${didx},1);renderSCProductRows()">✕</button>
+      </div>`).join('');
+    return `<div class="card" style="background:var(--gray-100);margin-bottom:10px;padding:12px 14px;">
+      <div class="line-item-row" style="grid-template-columns:1.4fr 1fr 1fr 34px;">
+        <input type="text" value="${row.inprocess_code}" list="inprocessCodeList" placeholder="Code 222-xxx" style="${validCode?'':'border-color:var(--red-600);background:var(--red-100);'}" onchange="scProductRows[${idx}].inprocess_code=this.value; renderSCProductRows();">
+        <input type="number" value="${row.qty_pcs}" placeholder="จำนวน (ชิ้น)" onchange="scProductRows[${idx}].qty_pcs=this.value">
+        <input type="number" value="${row.weight_kg}" placeholder="น้ำหนัก (kg)" onchange="scProductRows[${idx}].weight_kg=this.value">
+        <button class="icon-btn" onclick="scProductRows.splice(${idx},1);renderSCProductRows()">✕</button>
+      </div>
+      <div style="margin-left:6px;margin-top:6px;">
+        ${destRows}
+        <button class="btn btn-ghost btn-sm" style="margin-top:2px;" onclick="scProductRows[${idx}].destinations.push({dept:'',weight_kg:''});renderSCProductRows()">+ เพิ่มปลายทาง</button>
+      </div>
     </div>`;
-  }).join('') + dl + `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="scProductRows.push({product_code:'',qty_pcs:'',weight_kg:'',note:''});renderSCProductRows()">+ เพิ่มแถว</button>`;
-}
-function parseSCBulkCsv(){
-  const text = document.getElementById('scBulkCsv').value.trim();
-  if(!text) return;
-  scProductRows = text.split('\n').map(l=>l.trim()).filter(l=>l).map(line=>{
-    const parts = line.split(/[,\t]/).map(p=>p.trim());
-    return {product_code:parts[0]||'', qty_pcs:parts[1]||'', weight_kg:parts[2]||'', note:''};
-  });
-  renderSCProductRows();
-}
-function parseSCBulkExcel(inputEl){
-  const file = inputEl.files[0]; if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    const wb = XLSX.read(e.target.result, {type:'array'});
-    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-    scProductRows = json.filter(r=>r&&r[0]).map(r=>({product_code:String(r[0]||''), qty_pcs:r[1]||'', weight_kg:r[2]||'', note:''}));
-    renderSCProductRows();
-  };
-  reader.readAsArrayBuffer(file);
-}
-function downloadSCTemplate(){
-  const csv = 'Product Code,จำนวนชิ้น,น้ำหนัก(kg)\n110001,50,500\n';
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='SC_Import_Template.csv'; a.click();
+  }).join('') + dl;
 }
 async function submitSpecialcut(){
   const resultEl = document.getElementById('scSubmitResult');
-  const date=document.getElementById('scDate').value, lot=document.getElementById('scLot').value.trim();
-  const sublot=document.getElementById('scSublot').value.trim(), part=document.getElementById('scPart').value;
-  const rmWeight=document.getElementById('scRmWeight').value, status=document.getElementById('scStatus').value;
-  if(!date||!lot||!sublot){ alert('กรุณากรอก วันที่/Lot/Sublot ให้ครบ'); return; }
-  const products = window._scProductCache||[];
-  const invalid = scProductRows.filter(r=>r.product_code && !products.find(p=>p.product_code===r.product_code));
-  if(invalid.length>0){ resultEl.innerHTML = `<div class="err-banner">พบ Product Code ที่ไม่มีใน Master ${invalid.length} รายการ กรุณาแก้ก่อนบันทึก</div>`; return; }
-  const validProducts = scProductRows.filter(r=>r.product_code || r.qty_pcs || r.weight_kg);
+  const date=document.getElementById('scDate').value;
+  const status=document.getElementById('scStatus').value, note=document.getElementById('scNote').value.trim();
+  if(!window._scRmReceived){ alert('กรุณาดึง RM จาก Cut Up ก่อน'); return; }
+  const {lot, sublot, items} = window._scRmReceived;
+  const totalRmWeight = items.reduce((s,r)=>s+(Number(r.total_weight_kg)||0),0);
+
+  const inprocessItems = window._inprocessCache||[];
+  const invalid = scProductRows.filter(r=>r.inprocess_code && !inprocessItems.find(p=>p.inprocess_code===r.inprocess_code));
+  if(invalid.length>0){ resultEl.innerHTML = `<div class="err-banner">พบ Code In-Process ที่ไม่มีใน Master ${invalid.length} รายการ กรุณาแก้ก่อนบันทึก</div>`; return; }
+  const validProducts = scProductRows.filter(r=>r.inprocess_code || r.qty_pcs || r.weight_kg).map(r=>({
+    inprocess_code: r.inprocess_code, qty_pcs: r.qty_pcs, weight_kg: r.weight_kg,
+    destinations: r.destinations.filter(d=>d.dept)
+  }));
+  if(validProducts.length===0){ resultEl.innerHTML = `<div class="err-banner">กรุณากรอก Code In-Process อย่างน้อย 1 รายการ</div>`; return; }
   try{
-    await apiCreateSpecialcut(date, lot, sublot, part, rmWeight?Number(rmWeight):null, status, null, validProducts);
+    await apiCreateSpecialcut(date, scCurrentDept, lot, sublot, totalRmWeight, status, note, validProducts);
     resultEl.innerHTML = `<div class="note-banner">บันทึกสำเร็จ</div>`;
     renderSpecialcutPage();
   }catch(e){ resultEl.innerHTML = `<div class="err-banner">บันทึกไม่สำเร็จ: ${e.message||'เกิดข้อผิดพลาด'}</div>`; }
@@ -1501,6 +1517,45 @@ function importRMBulkExcel(inputEl){
     importRMRows(json.filter(r=>r&&r[0]));
   };
   reader.readAsArrayBuffer(file);
+}
+
+/* ================= Master Data: In-Process Master List (222 — Special Cut) ================= */
+async function renderInprocessMasterPage(){
+  setLoading();
+  let items;
+  try{ items = await apiListInprocessMaster(); }catch(e){ renderErrorState('โหลดข้อมูลไม่สำเร็จ — ตรวจสอบว่ารัน patch3g แล้ว'); return; }
+  items = items.slice().sort((a,b)=> (a.sub_department||'').localeCompare(b.sub_department||'') || a.inprocess_code.localeCompare(b.inprocess_code));
+  const rows = items.map(r=>`<tr>
+    <td class="lotcode">${r.inprocess_code}</td><td>${r.inprocess_name}</td><td><span class="badge badge-info">${r.sub_department||'-'}</span></td>
+    <td>${r.active?'<span class="badge badge-pass">Active</span>':'<span class="badge badge-fail">Inactive</span>'}</td>
+  </tr>`).join('') || `<tr><td colspan="4"><div class="empty-state">ยังไม่มี Code In-Process</div></td></tr>`;
+
+  const formHtml = canWrite() ? `
+    <div class="card">
+      <div class="card-title">เพิ่ม Code In-Process ใหม่ (ต้องขึ้นต้นด้วย 222)</div>
+      <div class="form-grid3">
+        <div class="field"><label>Code (222-xxx)</label><input type="text" id="ipCode" placeholder="เช่น 222001"></div>
+        <div class="field"><label>ชื่อ</label><input type="text" id="ipName" placeholder="เช่น BB หมัก"></div>
+        <div class="field"><label>แผนกย่อย</label><select id="ipDept">${SC_SUBDEPTS.map(d=>`<option>${d}</option>`).join('')}</select></div>
+      </div>
+      <button class="btn" style="margin-top:10px;" onclick="saveInprocessMaster()">💾 บันทึก</button>
+      <div id="ipSaveMsg" style="margin-top:8px;font-size:13px;"></div>
+    </div>` : `<div class="readonly-banner">บทบาทของคุณดูข้อมูลได้อย่างเดียว</div>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    ${stationHeaderHtml('sh-master','🏷️','In-Process Master List','Code ระหว่างผลิต (222) ที่ใช้ในหน้า Special Cut — คนละชุดกับ Product Master (FG, 111) ซึ่งเกิดที่ Freeze-VacuumPack เท่านั้น')}
+    ${formHtml}
+    <div class="card"><div class="card-title">Code In-Process ทั้งหมด (${items.length})</div>
+      <table><thead><tr><th>Code</th><th>ชื่อ</th><th>แผนกย่อย</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+}
+async function saveInprocessMaster(){
+  const code=document.getElementById('ipCode').value.trim(), name=document.getElementById('ipName').value.trim();
+  const dept=document.getElementById('ipDept').value, msg=document.getElementById('ipSaveMsg');
+  if(!code||!name){ msg.textContent='กรุณากรอก Code และชื่อ'; msg.style.color='var(--red-600)'; return; }
+  if(!code.startsWith('222')){ msg.textContent='Code ต้องขึ้นต้นด้วย 222'; msg.style.color='var(--red-600)'; return; }
+  try{ await apiUpsertInprocessMaster(code,name,dept,true); msg.textContent='บันทึกสำเร็จ'; msg.style.color='var(--green-700)'; renderInprocessMasterPage(); }
+  catch(e){ msg.textContent='บันทึกไม่สำเร็จ: '+(e.message||'เกิดข้อผิดพลาด'); msg.style.color='var(--red-600)'; }
 }
 
 /* ================= Product Master ================= */
